@@ -84,3 +84,11 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] 归一化：邮箱 trim+小写（DB insensitive）；电话去空格/连字符等非数字字符；姓名/公司 trim+insensitive
 - [x] 仅 active 的联系方式参与解析；inactive 一律忽略
 - [x] Gate 4 测试 9 个：Unique / Not Found / Ambiguous（姓名、邮箱）/ Email Match / Phone Match / Inactive 忽略 / 邮箱优先于姓名 / 空输入
+
+## Task 5 验收状态（Gate 5）
+
+- [x] Memory Pipeline（`src/server/memory/pipeline.ts`）：Candidate → Confirmed → Verified
+- [x] 状态映射：model_inferred/0.3 → user_confirmed/0.8 → tool_verified/1.0
+- [x] `stageOf` / `isVerifiedMemory`（仅 tool_verified 为 Verified）
+- [x] 受保护升级：仅 Candidate 可 confirm、仅 Confirmed 可 verify；重复升级/降级拒绝
+- [x] Gate 5 核心不变式：Model Inference ≠ Verified Memory（模型推断记忆不可直接验证）
