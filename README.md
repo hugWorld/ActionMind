@@ -156,3 +156,12 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] `scripts/ensure-embed.sh`：幂等拉起 embedding 服务（已健康即退出；否则拉起并等待就绪），解决 WSL 后台进程被 VM 回收导致的 ECONNREFUSED
 - [x] 测试 beforeAll 统一改走 `tests/helpers/ensure-embed.ts`（共享进程，不再各文件 spawn+kill）
 - [x] `HF_HUB_DISABLE_XET=1` 已固化进启动脚本（huggingface_hub≥1.31 默认 Xet 协议，hf-mirror 401）
+
+## Task 12 验收状态（Gate 12）
+
+- [x] Tool Executor（`src/server/tools/`）：PostgreSQL-backed Tools，mock 设备能力（不调用真实 Windows 日历/联系人）
+- [x] `create_event` → meetings 表（title/start/end/location/contactId 关联、eventId mock 标记）
+- [x] `create_contact` → contacts + emails/phones 子表（verified/active/source 留痕）
+- [x] `update_contact` → 按 contactId 或确定性解析定位（not_found/ambiguous 抛 TOOL_TARGET 错误，不假装成功）；新增渠道去重、保留旧渠道
+- [x] `toolForAction` 按 Action.type 分发 + `executeWithTools` 统一入口（复用 Gate 11 守卫与 Execution 留痕）
+- [x] Gate 12：完整链路 Agent→Action→Confirm→Executor→Tool→Result（真实 LLM 场景：约李雷建会议；确定性场景：建联系人/更新联系人/工具失败双 FAILED/未确认拒绝）
