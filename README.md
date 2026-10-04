@@ -48,3 +48,12 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] .env 可读取（Vitest env smoke 通过）
 - [x] Vitest 可运行（3 tests passed）
 - [x] Playwright 可运行（1 e2e passed）
+
+## Task 1 验收状态（Gate 1）
+
+- [x] Create Contact（含邮箱/电话多值、verified/active/source）
+- [x] Create Memory（type/source/confidence/metadata/embedding 列）
+- [x] Create Meeting（contact/title/start/end/location/status）
+- [x] Create Action（type/status/payload/evidence）
+- [x] Create Execution（tool_name/request/response/status）
+- [x] pgvector 扩展随迁移声明（CREATE EXTENSION IF NOT EXISTS vector）

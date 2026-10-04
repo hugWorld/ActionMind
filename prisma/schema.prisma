@@ -1,12 +1,143 @@
-// ActionMind Prisma schema — Task 0 基线
-// 说明：Task 0 仅验证 Prisma 连接与 pgvector 可用性；
-// Contact/Memory/Meeting/Action/Execution 完整模型在 Task 1 引入。
+// ActionMind Prisma schema — Task 1 Core Schema
+// 实体：Contact / Memory / Meeting / Action / Execution（PRD §42-46）
+// 说明：embedding 列使用 pgvector（vector(1536)），后续 Task 6 填充。
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ---------- Contact ----------
+
+model Contact {
+  id           String         @id @default(cuid())
+  name         String
+  organization String?
+  role         String?
+  emails       ContactEmail[]
+  phones       ContactPhone[]
+  memories     Memory[]
+  meetings     Meeting[]
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@map("contacts")
+}
+
+// 邮箱（PRD §43：多值、verified/active、可溯源）
+model ContactEmail {
+  id        String   @id @default(cuid())
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactId String   @map("contact_id")
+  email     String
+  verified  Boolean  @default(false)
+  active    Boolean  @default(true)
+  source    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([contactId, email])
+  @@index([email])
+  @@map("contact_emails")
+}
+
+// 电话
+model ContactPhone {
+  id        String   @id @default(cuid())
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactId String   @map("contact_id")
+  phone     String
+  verified  Boolean  @default(false)
+  active    Boolean  @default(true)
+  source    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([contactId, phone])
+  @@index([phone])
+  @@map("contact_phones")
+}
+
+// ---------- Memory ----------
+
+// type: meeting | contact_update | action | fact
+// source: screenshot_extracted | user_input | model_inferred | user_confirmed | tool_verified
+model Memory {
+  id         String   @id @default(cuid())
+  type       String
+  contact    Contact? @relation(fields: [contactId], references: [id])
+  contactId  String?  @map("contact_id")
+  content    String
+  timestamp  DateTime?
+  source     String
+  confidence Float    @default(0)
+  embedding  Unsupported("vector(1536)")?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([contactId])
+  @@index([type])
+  @@index([source])
+  @@map("memories")
+}
+
+// ---------- Meeting ----------
+
+// status: scheduled | completed | cancelled
+model Meeting {
+  id        String    @id @default(cuid())
+  contact   Contact?  @relation(fields: [contactId], references: [id])
+  contactId String?   @map("contact_id")
+  title     String
+  startAt   DateTime  @map("start_at")
+  endAt     DateTime? @map("end_at")
+  location  String?
+  status    String    @default("scheduled")
+  source    String?
+  eventId   String?   @map("event_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([contactId])
+  @@index([startAt])
+  @@map("meetings")
+}
+
+// ---------- Action ----------
+
+// type: CREATE_MEETING | CREATE_CONTACT | UPDATE_CONTACT
+// status: DRAFT | CONFIRMED | EXECUTING | SUCCESS | FAILED | CANCELLED
+model Action {
+  id         String      @id @default(cuid())
+  type       String
+  status     String      @default("DRAFT")
+  payload    Json
+  source     String?
+  evidence   Json?
+  executions Execution[]
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("actions")
+}
+
+// ---------- Execution ----------
+
+model Execution {
+  id        String   @id @default(cuid())
+  action    Action   @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  actionId  String   @map("action_id")
+  toolName  String   @map("tool_name")
+  request   Json
+  response  Json?
+  status    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([actionId])
+  @@map("executions")
 }
