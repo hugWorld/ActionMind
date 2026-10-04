@@ -1,4 +1,4 @@
-import type { Memory } from "@prisma/client";
+import type { Memory, Prisma } from "@prisma/client";
 import { prisma } from "../db";
 
 // ---------- 三级状态（Task 5 / Gate 5） ----------
@@ -66,7 +66,7 @@ export async function createCandidateMemory(
       timestamp: input.timestamp,
       source: MEMORY_SOURCE.CANDIDATE,
       confidence: MEMORY_CONFIDENCE.CANDIDATE,
-      metadata: input.metadata ?? undefined,
+      metadata: (input.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
     },
   });
 }

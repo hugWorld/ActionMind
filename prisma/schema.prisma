@@ -1,6 +1,6 @@
 // ActionMind Prisma schema — Task 1 Core Schema
 // 实体：Contact / Memory / Meeting / Action / Execution（PRD §42-46）
-// 说明：embedding 列使用 pgvector（vector(1536)），后续 Task 6 填充。
+// 说明：embedding 列使用 pgvector（vector(512)），后续 Task 6 填充。
 
 generator client {
   provider        = "prisma-client-js"
@@ -75,7 +75,7 @@ model Memory {
   timestamp  DateTime?
   source     String
   confidence Float    @default(0)
-  embedding  Unsupported("vector(1536)")?
+  embedding  Unsupported("vector(512)")?
   metadata   Json?
   createdAt  DateTime @default(now()) @map("created_at")
 

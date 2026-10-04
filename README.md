@@ -92,3 +92,11 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] `stageOf` / `isVerifiedMemory`（仅 tool_verified 为 Verified）
 - [x] 受保护升级：仅 Candidate 可 confirm、仅 Confirmed 可 verify；重复升级/降级拒绝
 - [x] Gate 5 核心不变式：Model Inference ≠ Verified Memory（模型推断记忆不可直接验证）
+
+## Task 6 验收状态（Gate 6）
+
+- [x] EmbeddingProvider 抽象 + HttpEmbeddingProvider（本地 Python 服务，`npm run embed:server` 启动）
+- [x] 本地 CPU 模型：fastembed + BAAI/bge-small-zh-v1.5（512 维，独立 venv `~/actionmind-embed-venv`，模型下载走 hf-mirror）
+- [x] 迁移：`memories.embedding` vector(1536) → vector(512)（手写迁移——Prisma 不 diff Unsupported() 内部维度，见 `20261004180000_task6_embedding_dim`）
+- [x] `embedMemory` / `embedMemoriesMissing`（只补缺失向量）/ `searchMemories`（pgvector 余弦距离 Top-K + similarity）
+- [x] Gate 6：20 条记忆全部生成 embedding；10 个查询全部完成 Vector Search，Top-5 命中预期记忆
