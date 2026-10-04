@@ -76,3 +76,11 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] 视觉样本：1 张真实聊天截图（张三/李四 多人 + 周五相对时间 + “上次那个地方”历史引用）经 HTTP 管线识别正确
 - [x] 覆盖维度（会议/联系人/更新/多人/相对时间/历史引用）：由 Task 2 的 7 个文本+图像样本补齐（Gate 3 截图数按用户指示放宽为 1）
 - [x] 校验测试：缺文件 / 非图片 → 400
+
+## Task 4 验收状态（Gate 4）
+
+- [x] Contact Resolution（`src/server/contacts/resolve.ts`）：Name / Email / Phone / Organization
+- [x] 确定性优先级：邮箱（最强标识）→ 电话 → 姓名 → 公司（兜底）
+- [x] 归一化：邮箱 trim+小写（DB insensitive）；电话去空格/连字符等非数字字符；姓名/公司 trim+insensitive
+- [x] 仅 active 的联系方式参与解析；inactive 一律忽略
+- [x] Gate 4 测试 9 个：Unique / Not Found / Ambiguous（姓名、邮箱）/ Email Match / Phone Match / Inactive 忽略 / 邮箱优先于姓名 / 空输入
