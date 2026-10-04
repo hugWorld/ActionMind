@@ -165,3 +165,13 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] `update_contact` → 按 contactId 或确定性解析定位（not_found/ambiguous 抛 TOOL_TARGET 错误，不假装成功）；新增渠道去重、保留旧渠道
 - [x] `toolForAction` 按 Action.type 分发 + `executeWithTools` 统一入口（复用 Gate 11 守卫与 Execution 留痕）
 - [x] Gate 12：完整链路 Agent→Action→Confirm→Executor→Tool→Result（真实 LLM 场景：约李雷建会议；确定性场景：建联系人/更新联系人/工具失败双 FAILED/未确认拒绝）
+
+## Task 13 验收状态（Gate 13）
+
+- [x] Verified Memory（Tool Success → Memory）：`createVerifiedMemory`（source=tool_verified, confidence=1.0）
+- [x] 幂等：同 contact+content 的 Verified Memory 已存在则跳过（created=false）
+- [x] 可选即时 embedding（pgvector 列走 $executeRaw；失败不阻塞记忆本身，可稍后回填）
+- [x] `executeWithTools` 成功路径自动沉淀：create_event→meeting / create_contact→contact_update / update_contact→contact_update（含新增渠道/组织变更明细），metadata 记 actionId 可溯源
+- [x] 失败路径零沉淀：工具失败不生成任何 Verified Memory
+- [x] 不变式保持：Model Inference ≠ Verified Memory（候选仍须经用户确认才能升级；Verified 唯一来源为工具成功）
+- [x] 健壮性修复：`embedMemoriesMissing` 回填容忍记忆被并行删除（findUnique 而非 findUniqueOrThrow）

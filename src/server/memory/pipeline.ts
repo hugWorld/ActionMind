@@ -1,5 +1,6 @@
 import type { Memory, Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { toPgVector } from "../embedding/provider";
 
 // ---------- 三级状态（Task 5 / Gate 5） ----------
 // Candidate（模型推断/截图提取，低置信） → Confirmed（用户确认） → Verified（工具验证成功）
@@ -106,4 +107,67 @@ export async function verifyMemory(id: string): Promise<Memory> {
       confidence: MEMORY_CONFIDENCE.VERIFIED,
     },
   });
+}
+
+// ---------- Task 13 — Verified Memory（Tool Success 直接沉淀） ----------
+
+export interface CreateVerifiedMemoryInput {
+  type: string;
+  contactId?: string | null;
+  content: string;
+  timestamp?: Date;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifiedMemoryResult {
+  memory: Memory;
+  /** false 表示已存在同 contact+content 的 Verified Memory（幂等跳过） */
+  created: boolean;
+}
+
+/**
+ * 工具执行成功 → Verified Memory（source=tool_verified, confidence=1.0）。
+ * - 幂等：同 contactId+content 的 tool_verified 记忆已存在则跳过；
+ * - 可选 embed 回调：传入则当场生成 embedding（pgvector 列必须走 $executeRaw）；
+ * - 与 Task 5 的升级路径（Candidate→Confirmed→Verified）并列：工具事实链直接落库，
+ *   不破坏「Model Inference ≠ Verified Memory」不变式（模型推断仍只能先成为 Candidate）。
+ */
+export async function createVerifiedMemory(
+  input: CreateVerifiedMemoryInput,
+  options?: { embed?: (content: string) => Promise<number[]> },
+): Promise<VerifiedMemoryResult> {
+  const existing = await prisma.memory.findFirst({
+    where: {
+      contactId: input.contactId ?? undefined,
+      content: input.content,
+      source: MEMORY_SOURCE.VERIFIED,
+    },
+  });
+  if (existing) return { memory: existing, created: false };
+
+  const memory = await prisma.memory.create({
+    data: {
+      type: input.type,
+      contactId: input.contactId ?? undefined,
+      content: input.content,
+      timestamp: input.timestamp,
+      source: MEMORY_SOURCE.VERIFIED,
+      confidence: MEMORY_CONFIDENCE.VERIFIED,
+      metadata: (input.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+    },
+  });
+
+  if (options?.embed) {
+    try {
+      const vec = await options.embed(input.content);
+      if (vec.length > 0) {
+        await prisma.$executeRaw`
+          UPDATE memories SET embedding = ${toPgVector(vec)}::vector WHERE id = ${memory.id}
+        `;
+      }
+    } catch {
+      // embedding 生成失败不影响 Verified Memory 本身（可稍后 embedMemoriesMissing 回填）
+    }
+  }
+  return { memory, created: true };
 }

@@ -10,7 +10,9 @@ export async function embedMemory(
   memoryId: string,
   provider: EmbeddingProvider,
 ): Promise<void> {
-  const memory = await prisma.memory.findUniqueOrThrow({ where: { id: memoryId } });
+  // 回填期间记忆可能已被删除（并行清理/竞态）→ 容忍缺失，直接跳过
+  const memory = await prisma.memory.findUnique({ where: { id: memoryId } });
+  if (!memory) return;
   const [vec] = await provider.embed([memory.content]);
   await prisma.$executeRaw`
     UPDATE memories SET embedding = ${toPgVector(vec)}::vector WHERE id = ${memoryId}

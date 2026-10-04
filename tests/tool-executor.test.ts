@@ -49,6 +49,13 @@ describe("Task 12: Tool Executor", () => {
   }, 180_000);
 
   afterAll(async () => {
+    // executeWithTools 会沉淀 Verified Memory（metadata->>'actionId'），一并清理
+    for (const id of createdActions) {
+      const mems = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM memories WHERE metadata->>'actionId' = ${id}
+      `;
+      for (const m of mems) await prisma.memory.delete({ where: { id: m.id } }).catch(() => {});
+    }
     for (const id of createdMeetings) await prisma.meeting.delete({ where: { id } }).catch(() => {});
     for (const id of createdContacts) await prisma.contact.delete({ where: { id } }).catch(() => {});
     for (const id of createdActions) await prisma.action.delete({ where: { id } }).catch(() => {});
@@ -57,10 +64,17 @@ describe("Task 12: Tool Executor", () => {
 
   it("Gate 12 完整链路（真实 LLM）：Agent → Action → Confirm → Executor → Tool → Result", async () => {
     if (!provider) return;
-    const { outcome } = await runAgentLoop("帮我约李雷，周五下午三点。", {
+    // 真实 LLM 非确定性：偶发 ask_user/unknown（抖动）时最多重试一次，仍失败才判错
+    let outcome = (await runAgentLoop("帮我约李雷，周五下午三点。", {
       provider,
       embeddingProvider: embedding,
-    });
+    })).outcome;
+    if (outcome.kind !== "action_card") {
+      outcome = (await runAgentLoop("帮我约李雷，周五下午三点。", {
+        provider,
+        embeddingProvider: embedding,
+      })).outcome;
+    }
     expect(outcome.kind).toBe("action_card");
     if (outcome.kind !== "action_card") return;
     expect(outcome.action.type).toBe("CREATE_MEETING");

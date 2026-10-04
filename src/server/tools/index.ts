@@ -3,6 +3,8 @@ import { prisma } from "../db";
 import { viewAction } from "../actions";
 import { executeAction } from "../execution";
 import { resolveContact } from "../contacts/resolve";
+import { createVerifiedMemory } from "../memory";
+import { embedOne, type EmbeddingProvider } from "../embedding";
 
 // Task 12 — Tool Executor
 // PostgreSQL-backed Tools（mock 设备能力，不调用真实 Windows 日历/联系人 API）：
@@ -190,6 +192,8 @@ export async function updateContact(action: ActionLike) {
   const role = typeof p.role === "string" && p.role.trim() ? p.role.trim() : null;
   const addEmails = stringsOf(p.email ?? p.emails);
   const addPhones = stringsOf(p.phone ?? p.phones);
+  const addedEmails: string[] = [];
+  const addedPhones: string[] = [];
 
   await prisma.$transaction(async (tx) => {
     if (organization !== null || role !== null) {
@@ -209,6 +213,7 @@ export async function updateContact(action: ActionLike) {
         await tx.contactEmail.create({
           data: { contactId: targetId, email, verified: false, active: true, source: "tool_update_contact" },
         });
+        addedEmails.push(email);
       }
     }
     for (const phone of addPhones) {
@@ -217,6 +222,7 @@ export async function updateContact(action: ActionLike) {
         await tx.contactPhone.create({
           data: { contactId: targetId, phone, verified: false, active: true, source: "tool_update_contact" },
         });
+        addedPhones.push(phone);
       }
     }
   });
@@ -239,7 +245,108 @@ export async function updateContact(action: ActionLike) {
     role: updated.role,
     emails: updated.emails.map((e) => e.email),
     phones: updated.phones.map((ph) => ph.phone),
+    addedEmails,
+    addedPhones,
   };
+}
+
+// ---------- Task 13 — Tool Success → Verified Memory ----------
+
+function fmtDateTime(d: Date): string {
+  return d.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
+}
+
+/**
+ * 工具执行成功后，把真实发生的结果沉淀为 Verified Memory（source=tool_verified, confidence=1.0）。
+ * 失败路径（result.ok=false）不调用本函数 → 不生成 Verified Memory。
+ */
+async function recordVerifiedMemory(
+  action: ActionLike,
+  response: unknown,
+  embeddingProvider?: EmbeddingProvider,
+): Promise<void> {
+  const p = mergedPayload(payloadOf(action));
+  const embed = embeddingProvider
+    ? (content: string) => embedOne(embeddingProvider, content)
+    : undefined;
+
+  switch (action.type) {
+    case "CREATE_MEETING": {
+      const r = response as {
+        meetingId: string;
+        title: string;
+        startAt: string;
+        endAt: string | null;
+        location: string | null;
+        contactId: string | null;
+      };
+      const contactName = typeof p.name === "string" && p.name.trim() ? p.name.trim() : null;
+      const when = fmtDateTime(new Date(r.startAt));
+      const content =
+        `已预约会议「${r.title}」：${when}` +
+        (r.location ? `，地点：${r.location}` : "") +
+        (contactName ? `，对象：${contactName}` : "");
+      await createVerifiedMemory(
+        {
+          type: "meeting",
+          contactId: r.contactId,
+          content,
+          timestamp: new Date(r.startAt),
+          metadata: { meetingId: r.meetingId, actionId: action.id },
+        },
+        { embed },
+      );
+      break;
+    }
+    case "CREATE_CONTACT": {
+      const r = response as {
+        contactId: string;
+        name: string;
+        organization: string | null;
+        emails: string[];
+        phones: string[];
+      };
+      const content =
+        `已创建联系人 ${r.name}` +
+        (r.organization ? `（${r.organization}）` : "") +
+        (r.emails.length ? `，邮箱：${r.emails.join("、")}` : "") +
+        (r.phones.length ? `，电话：${r.phones.join("、")}` : "");
+      await createVerifiedMemory(
+        {
+          type: "contact_update",
+          contactId: r.contactId,
+          content,
+          metadata: { contactId: r.contactId, actionId: action.id },
+        },
+        { embed },
+      );
+      break;
+    }
+    case "UPDATE_CONTACT": {
+      const r = response as {
+        contactId: string;
+        name: string;
+        organization: string | null;
+        addedEmails: string[];
+        addedPhones: string[];
+      };
+      const changes: string[] = [];
+      if (r.addedEmails.length) changes.push(`新增邮箱：${r.addedEmails.join("、")}`);
+      if (r.addedPhones.length) changes.push(`新增电话：${r.addedPhones.join("、")}`);
+      if (r.organization) changes.push(`组织变更为：${r.organization}`);
+      const content = `联系人 ${r.name} 已更新${changes.length ? `（${changes.join("；")}）` : ""}`;
+      await createVerifiedMemory(
+        {
+          type: "contact_update",
+          contactId: r.contactId,
+          content,
+          metadata: { contactId: r.contactId, actionId: action.id },
+        },
+        { embed },
+      );
+      break;
+    }
+  }
 }
 
 // ---------- 分发与统一执行入口 ----------
@@ -263,9 +370,18 @@ export function toolForAction(action: ActionLike): {
 /**
  * Gate 12 统一入口：按 Action 类型自动选择 PostgreSQL-backed 工具并执行。
  * 链路：Action(已 CONFIRMED) → Executor(守卫) → Tool → Result(Execution 留痕)
+ * Gate 13：工具成功 → 沉淀 Verified Memory（source=tool_verified, confidence=1.0，可选即时 embedding）；
+ *          失败 → 不生成 Verified Memory。
  */
-export async function executeWithTools(actionId: string) {
+export async function executeWithTools(
+  actionId: string,
+  deps: { embeddingProvider?: EmbeddingProvider } = {},
+) {
   const action = await viewAction(actionId);
   const { toolName, run } = toolForAction(action);
-  return executeAction(actionId, { toolName, run });
+  const result = await executeAction(actionId, { toolName, run });
+  if (result.ok && result.response !== undefined) {
+    await recordVerifiedMemory(action, result.response, deps.embeddingProvider);
+  }
+  return result;
 }
