@@ -12,6 +12,10 @@ export const ACTION_CARD_FIELDS = [
   "contact",
   "notes",
   "missing",
+  "name",
+  "email",
+  "phone",
+  "organization",
 ] as const;
 
 export type ActionCardField = (typeof ACTION_CARD_FIELDS)[number];
@@ -50,6 +54,10 @@ function validateFieldValue(field: ActionCardField, value: unknown): void {
     case "end":
     case "location":
     case "notes":
+    case "name":
+    case "email":
+    case "phone":
+    case "organization":
       if (typeof value !== "string") {
         throw new ActionCardError(`${field} 必须是字符串`, "INVALID_FIELDS");
       }
@@ -144,4 +152,27 @@ export async function cancelAction(id: string) {
     throw new ActionCardError(`只有 DRAFT 状态的卡片可取消（当前 ${action.status}）`, "INVALID_STATE");
   }
   return prisma.action.update({ where: { id }, data: { status: "CANCELLED" } });
+}
+
+// ---------- Task 16 — 创建 Action Card（UI 闭环入口） ----------
+
+export const ACTION_TYPES = ["CREATE_MEETING", "CREATE_CONTACT", "UPDATE_CONTACT"] as const;
+export type ActionType = (typeof ACTION_TYPES)[number];
+
+/** 由理解结果创建 DRAFT 卡片；type 必须在白名单内，payload 必须是 JSON 对象 */
+export async function createActionCard(type: string, payload: Record<string, unknown>) {
+  if (!ACTION_TYPES.includes(type as ActionType)) {
+    throw new ActionCardError(`未知 Action 类型: ${type}`, "INVALID_FIELDS");
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new ActionCardError("payload 必须是 JSON 对象", "INVALID_FIELDS");
+  }
+  return prisma.action.create({
+    data: {
+      type,
+      status: "DRAFT",
+      payload: payload as Prisma.InputJsonValue,
+      source: "api_create",
+    },
+  });
 }

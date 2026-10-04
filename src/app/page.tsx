@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface Contact {
   name: string | null;
@@ -46,13 +47,61 @@ const FIELD_LABEL: Record<string, string> = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [creating, setCreating] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [userText, setUserText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Understanding | null>(null);
+
+  const onCreateCard = async () => {
+    if (!result || result.intent === "UNKNOWN") return;
+    setCreating(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {};
+      if (result.intent === "CREATE_MEETING") {
+        payload.title = result.meeting?.title ?? null;
+        payload.start = result.meeting?.start ?? null;
+        payload.end = result.meeting?.end ?? null;
+        payload.location = result.meeting?.location ?? null;
+        payload.notes = result.missing.length ? `待补：${result.missing.join(" / ")}` : null;
+        payload.contact = result.contacts[0]
+          ? {
+              name: result.contacts[0].name ?? undefined,
+              email: result.contacts[0].email ?? undefined,
+              phone: result.contacts[0].phone ?? undefined,
+            }
+          : null;
+        payload.missing = result.missing;
+      } else if (result.intent === "CREATE_CONTACT") {
+        const c = result.contacts[0];
+        payload.name = c?.name ?? null;
+        payload.email = c?.email ?? null;
+        payload.phone = c?.phone ?? null;
+        payload.organization = c?.organization ?? null;
+      } else if (result.intent === "UPDATE_CONTACT" && result.contactUpdate) {
+        payload.name = result.contactUpdate.contactName ?? null;
+        const field = result.contactUpdate.field ?? "";
+        if (field) payload[field] = result.contactUpdate.newValue ?? null;
+      }
+      const res = await fetch("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: result.intent, payload }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error?.message ?? `HTTP ${res.status}`);
+      router.push(`/actions?id=${body.action.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const onPick = (f: File | null) => {
     setFile(f);
@@ -235,6 +284,16 @@ export default function Home() {
                   ：{result.contactUpdate.newValue ?? "（未确定）"}
                 </p>
               </div>
+            )}
+
+            {result.intent !== "UNKNOWN" && (
+              <button
+                onClick={onCreateCard}
+                disabled={creating}
+                className="mt-1 w-full rounded-lg bg-violet-600 py-2.5 text-sm font-medium text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creating ? "生成中…" : "生成 Action Card →"}
+              </button>
             )}
 
             <details className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

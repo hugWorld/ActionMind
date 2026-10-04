@@ -193,3 +193,91 @@ npm run test:e2e    # Playwright：首页渲染 E2E
   - BM25 R@5 0.975 / MRR 0.975；Embedding 0.975 / 0.9667；Hybrid 0.975 / 0.9667（与单通道持平）
   - Unauthorized Execution Rate 0.0（7 次未授权尝试全部拒绝）；Verified Memory Precision 1.0（成功 4 case 全部可溯源沉淀、失败 5 case 零沉淀）
 - 已知边界（逐 case 可查）：u05「新邮箱」措辞模型判 UPDATE_CONTACT（可接受分歧）；u07「我的手机号换成了 X」句式中号码偶发未入 phone 字段（真实 LLM 抽取抖动）；检索 0.975 来自 q17「周末安排」双相关只命中其一（部分召回口径）。
+
+## Task 16 — E2E & MVP 收尾（Action Card UI + 三完整场景）✅
+
+- **UI（Task 16）**：`src/app/actions/page.tsx` Action Card 列表页——按状态筛选、逐张卡片 View / Edit（白名单字段 + evidence 编辑留痕）/ Confirm / Cancel / Execute；执行成功展示工具结果并提示 Verified Memory 已沉淀；状态机冻结（CANCELLED/FAILED/SUCCESS 不可重跑）。新 API：`POST /api/actions`（由理解结果创建 DRAFT 卡片）、`POST /api/actions/:id/execute`（确认后执行 + 即时 embedding）。
+- **首页闭环**：上传截图 → 理解 → 「生成 Action Card →」跳转卡片页 → 编辑/确认/执行。
+- **三个完整场景（Gate 16）**：`tests/e2e-flow.test.ts`（API 级真实 LLM）——CREATE_MEETING / CREATE_CONTACT / UPDATE_CONTACT，每条链路：Understanding → Action Card → 未确认拒绝 → Confirm → Tool → Verified Memory → Future Query（Hybrid RAG + BM25）命中。`tests/e2e/action-cards.spec.ts`（Playwright UI 闭环）——上传截图 → 理解 → 生成卡片 → 编辑标题 → 确认 → 执行 → SUCCESS + Verified Memory 提示。
+- **三个 MVP Demo 支持**：Demo1 历史引用（needsMemory → 检索记忆补全地点）；Demo2 缺信息（missing → 用户补全后确认）；Demo3 长期记忆（执行成功后 Verified Memory，未来查询 RAG 命中）。
+
+
+---
+
+# 部署与运行教程（自行测试用）
+
+## 0. 前置条件
+
+- Windows + WSL（代码在 `~/ActionMind`，Windows 侧只开浏览器测试）。
+- WSL 内已装：Docker（容器 `actionmind-db`）、Node（`~/.local/bin/node`）、Prisma CLI。
+- `.env` 已配置：`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`（deepseek-flash，支持图像）/ `EMBEDDING_URL=http://127.0.0.1:8765` / `EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5` / `DATABASE_URL=postgresql://actionmind:actionmind_dev@localhost:5432/actionmind?schema=public`。
+
+## 1. 启动（三件事，按序）
+
+在 WSL 里执行：
+
+```bash
+cd ~/ActionMind
+export PATH="$HOME/.local/bin:$PATH"
+
+# ① 数据库（已建容器则秒起）
+docker start actionmind-db 2>/dev/null || docker compose up -d
+# 首次部署：npx prisma migrate deploy && npx prisma generate
+
+# ② Embedding 服务（幂等；首次会下载模型 ~90MB，约 1-2 分钟）
+bash scripts/ensure-embed.sh
+# 看到 "ready" 即 OK；服务被系统回收后可随时重跑本命令自愈
+
+# ③ Web 应用
+npm run dev
+# 显示 ready 后，Windows 浏览器打开 http://localhost:3000
+```
+
+> 注意：全部命令在 WSL 里跑；浏览器测试在 Windows 侧（访问 localhost:3000 即可，无需跨网络）。
+
+## 2. 自己测试的路径（三个 Demo）
+
+### Demo 1：创建会议（含历史引用）
+
+1. 首页上传一张聊天截图（例如：`张三：周五下午三点见？` / `李四：可以，还是上次那个地方。`）。
+2. 点「上传并理解」→ 看到 Intent=CREATE_MEETING、缺失项提示。
+3. 点「生成 Action Card →」跳到卡片页。
+4. 卡片上：**编辑**（补标题/地点）→ **确认** → **执行**。
+5. 成功后卡片变 SUCCESS，显示工具结果 +「已沉淀 Verified Memory」。
+6. 再发一次类似对话，Agent 会通过 RAG 检索到上次记忆（Demo 3 效果）。
+
+### Demo 2：缺信息 → Ask User 补全
+
+1. 上传只说了"帮我约张三"的截图/文字 → 理解结果 missing 含 time/location。
+2. 生成卡片后手动编辑补全时间地点，再确认执行（MVP 以卡片编辑作为补全通道）。
+
+### Demo 3：长期记忆
+
+1. 任何一次「确认 + 执行成功」都会写入 Verified Memory（source=tool_verified, confidence=1.0）。
+2. 之后提问（Agent 的 memory_search 或未来查询），Hybrid RAG（BM25+Embedding+结构化信号）会命中这些记忆。
+
+## 3. 测试与评估命令
+
+```bash
+npm run test          # 全部单元/集成测试（含 Task 0-16 + 70-case eval + 三场景 E2E flow）
+npm run eval          # 70-case 评估报告（落盘 eval-report.md / eval-report.json，逐 case 可查）
+npm run test:e2e      # Playwright UI 测试（需已装 chromium 系统依赖）
+npx tsc --noEmit      # 类型检查
+```
+
+## 4. 常用运维速查
+
+| 需求 | 命令 |
+| --- | --- |
+| 看数据库 | `docker exec actionmind-db psql -U actionmind -d actionmind` |
+| 重启 embedding | `bash scripts/ensure-embed.sh`（幂等） |
+| 回填缺失向量 | 服务端已自动（embedMemoriesMissing）；测试环境用 `npm run embed:server` |
+| 查看 Action 状态 | `SELECT id,type,status FROM actions ORDER BY created_at DESC LIMIT 10;` |
+| 看 Verified Memory | `SELECT id,source,confidence,content FROM memories WHERE source='tool_verified' ORDER BY created_at DESC LIMIT 10;` |
+
+## 5. 已知边界（自己测试时留意）
+
+- 会议标题为空时执行会被工具拒绝（正确防御）——先编辑补标题再确认。
+- 首次上传截图理解约需几秒（DeepSeek API）；Embedding 服务被 WSL 回收后需重跑 ensure-embed.sh。
+- 设备能力（日历/联系人）为 mock：写的是 PostgreSQL 表（meetings/contacts），未接真实 Windows API，但状态机与守卫逻辑与真实一致。
+
