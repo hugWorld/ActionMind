@@ -132,3 +132,12 @@ npm run test:e2e    # Playwright：首页渲染 E2E
       - 选择 Contact：not_found → ask_user 澄清（不假装已解析）
       - 无行动意图 → unknown
 - [x] 稳定性修复：embed_server 推理加锁串行化（onnxruntime 并发不保证确定性）；测试种子语料去重（agent 记忆与 eval-set 逐字不同，避免并行歧义）；embedding 断言改为 id 精确映射
+
+## Task 10 验收状态（Gate 10）
+
+- [x] Action Card 服务层（`src/server/actions/`）：View（viewAction/listActions）/ Edit / Cancel / Confirm
+- [x] 可编辑字段白名单：title / start / end / location / contact / notes / missing（Gate 10：Time / Location / Contact / Title 均可改）
+- [x] 编辑留痕：evidence.edits（at/field/from/to）；未变更字段跳过；其他 payload 字段原样保留
+- [x] 状态机：仅 DRAFT 可 Edit/Cancel/Confirm；CONFIRMED 与 CANCELLED 冻结（后续操作抛 INVALID_STATE）
+- [x] API：GET /api/actions(?status)、GET/PATCH /api/actions/:id、POST /api/actions/:id/confirm、POST /api/actions/:id/cancel
+- [x] Gate 10 测试：服务层 5 项 + 路由层 1 项（含 404 / 400 / 状态流转）
