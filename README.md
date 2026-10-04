@@ -67,3 +67,12 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] understandChat（文本）与 understandScreenshot（截图）入口，系统提示词内置当前 Asia/Shanghai 时间
 - [x] 契约：无法确定的信息一律 null（空串在 schema 层归一为 null）
 - [x] Gate 2 测试：7 个样本（创建会议[有时间/缺时间]、更新邮箱、创建联系人、历史引用 needsMemory、UNKNOWN、截图视觉识别），Intent/Contact/Time/ContactUpdate/null 全部命中
+
+## Task 3 验收状态（Gate 3）
+
+- [x] Screenshot Understanding 管线：Upload Screenshot → Vision LLM → Structured Understanding
+- [x] `POST /api/understand`（multipart 上传 / JSON base64 双格式，类型与 10MB 大小校验，key 缺失返回 503）
+- [x] 首页上传 UI：选图预览 + 补充文字 + 意图/联系人/会议/更新/缺失参数展示 + 原始 JSON
+- [x] 视觉样本：1 张真实聊天截图（张三/李四 多人 + 周五相对时间 + “上次那个地方”历史引用）经 HTTP 管线识别正确
+- [x] 覆盖维度（会议/联系人/更新/多人/相对时间/历史引用）：由 Task 2 的 7 个文本+图像样本补齐（Gate 3 截图数按用户指示放宽为 1）
+- [x] 校验测试：缺文件 / 非图片 → 400
