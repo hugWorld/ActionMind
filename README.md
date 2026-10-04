@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ActionMind
 
-## Getting Started
+Context-Aware Personal Action Agent — 从聊天截图与补充文字中理解人物、时间、联系方式与行动意图，
+生成可编辑、可逐张确认的 Action Card；用户确认后才调用设备能力（会议 / 联系人）执行，
+并将成功结果沉淀为联系人 Memory，结合上下文与已确认记忆给出有依据的洞察与建议。
 
-First, run the development server:
+- 完整产品说明见 [PRD.md](PRD.md)
+- 开发任务拆解见 [task.md](task.md)
+
+## 技术栈（Task 0 基线）
+
+Next.js 16（App Router）· React 19 · TypeScript · Tailwind CSS v4 · Prisma 6 · PostgreSQL 16 + pgvector · Vitest · Playwright · Docker Compose
+
+## 快速开始（WSL 内）
+
+前置：Node 22（`~/.local/bin`）、docker 守护进程、docker compose v2。
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd ~/ActionMind
+docker compose up -d          # 启动 PostgreSQL 16 + pgvector（镜像已本地导入）
+cp .env.example .env          # 默认 DATABASE_URL 已可用
+npm run prisma:generate
+npm run dev                   # 启动后 Windows 浏览器直接打开 http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+运行测试：
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test            # Vitest：.env 读取 + Prisma 连接 + pgvector 可用（3 tests）
+npm run test:e2e    # Playwright：首页渲染 E2E
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 环境注意
 
-## Learn More
+- npm registry 已配置为 npmmirror；Prisma 引擎下载走 `PRISMA_ENGINES_MIRROR=https://npmmirror.com/mirrors/prisma`。
+- Playwright Chromium 所需系统库已解压至 `~/.local/lib-ext`，`~/.bashrc` 已配置 `LD_LIBRARY_PATH`（新开终端生效）。
+- 本机网络对 GitHub / Docker Hub 直连不稳定：镜像从国内源（阿里云 / DaoCloud / npmmirror）获取。
+- docker 服务仍带有过期代理配置（`/etc/systemd/system/docker.service.d/proxy.conf` 指向失效的 `172.19.208.1:10808`）。
+  当前本地已有 pgvector 镜像，不影响 Task 0 使用；如需 `docker pull` 新镜像，请先执行：
+  `sudo rm /etc/systemd/system/docker.service.d/proxy.conf && sudo systemctl restart docker`
 
-To learn more about Next.js, take a look at the following resources:
+## Task 0 验收状态（Gate 0）
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [x] Next.js 启动（`npm run dev` / `npm run build` 均通过，Windows 可访问 localhost:3000）
+- [x] PostgreSQL 启动（docker compose，healthcheck 通过）
+- [x] Prisma 连接（Vitest db smoke 通过）
+- [x] pgvector 可用（extension vector 0.8.7）
+- [x] .env 可读取（Vitest env smoke 通过）
+- [x] Vitest 可运行（3 tests passed）
+- [x] Playwright 可运行（1 e2e passed）
