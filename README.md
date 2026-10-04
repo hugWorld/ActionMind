@@ -57,3 +57,13 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] Create Action（type/status/payload/evidence）
 - [x] Create Execution（tool_name/request/response/status）
 - [x] pgvector 扩展随迁移声明（CREATE EXTENSION IF NOT EXISTS vector）
+
+## Task 2 验收状态（Gate 2）
+
+- [x] LLMProvider 抽象：chat（自由文本）+ structured（JSON 结构化输出，Zod 校验失败自动重试并回喂错误）
+- [x] DeepSeekProvider：原生 fetch 调用 `/chat/completions`，`response_format=json_object`，自动去除 ```json 围栏
+- [x] 多模态：`image_url` 内容块（base64 data URL），模型 deepseek-flash（V4.1 Flash，支持视觉）
+- [x] ChatUnderstanding Zod Schema：Intent / contacts / meeting（含 needsMemory）/ contactUpdate / missing
+- [x] understandChat（文本）与 understandScreenshot（截图）入口，系统提示词内置当前 Asia/Shanghai 时间
+- [x] 契约：无法确定的信息一律 null（空串在 schema 层归一为 null）
+- [x] Gate 2 测试：7 个样本（创建会议[有时间/缺时间]、更新邮箱、创建联系人、历史引用 needsMemory、UNKNOWN、截图视觉识别），Intent/Contact/Time/ContactUpdate/null 全部命中
