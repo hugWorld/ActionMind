@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import type { EmbeddingProvider } from "./provider";
 import { toPgVector } from "./provider";
@@ -45,9 +46,13 @@ export interface VectorSearchHit {
 export async function searchMemories(
   provider: EmbeddingProvider,
   query: string,
-  options: { k?: number; minSimilarity?: number } = {},
+  options: { k?: number; minSimilarity?: number; contentIn?: string[] } = {},
 ): Promise<VectorSearchHit[]> {
   const k = options.k ?? 5;
+  const contentFilter =
+    options.contentIn && options.contentIn.length > 0
+      ? Prisma.sql`AND content IN (${Prisma.join(options.contentIn)})`
+      : Prisma.empty;
   const [vec] = await provider.embed([query]);
   const rows = await prisma.$queryRaw<
     Array<{
@@ -63,6 +68,7 @@ export async function searchMemories(
       1 - (embedding <=> ${toPgVector(vec)}::vector) AS similarity
     FROM memories
     WHERE embedding IS NOT NULL
+    ${contentFilter}
     ORDER BY embedding <=> ${toPgVector(vec)}::vector
     LIMIT ${k}
   `;

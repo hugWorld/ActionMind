@@ -108,3 +108,14 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] `buildBm25Index` / `searchBm25` / `keywordSearchMemories`，输出 Top-K / Score / Memory ID
 - [x] 打分 BM25(k1=1.5, b=0.75)，score 降序，score=0 的无关文档不返回
 - [x] Gate 7 测试：邮箱/电话/中文关键词精确命中；多文档命中排序；空索引/空查询
+
+## Task 8 验收状态（Gate 8）
+
+- [x] Hybrid RAG 检索器（`src/server/search/hybrid.ts`）：BM25 + Embedding 双通道各取 Top-N
+- [x] RRF 融合（小语料 rrfK=2，rank 差异显著）→ 双通道一致加分（crossBonus=0.05）
+- [x] Structured Retrieval：查询类型词（会议/邮箱/电话/出差/峰会/预算等）→ 记忆类型加权（structuredBoost=0.03，仅作 tiebreaker 不主导排序）
+- [x] 重排后输出 Top-K / Score / Memory ID / 来源标注（bm25|embedding）
+- [x] 评估指标（`src/server/eval/metrics.ts`）：Recall@K 与 MRR@K
+- [x] Gate 8：同一批数据（`tests/fixtures/eval-set.ts`：20 条记忆 + 13 个查询，含 3 个通道分歧查询）对比三方法：
+      BM25 / Embedding / Hybrid 均 Recall@5=1.0、MRR@5=1.0；Hybrid Recall@5 ≥ 单通道最优
+- [x] 修复：并行测试竞态（embedding 计数断言限定本测试记忆集）
