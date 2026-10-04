@@ -141,3 +141,12 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] 状态机：仅 DRAFT 可 Edit/Cancel/Confirm；CONFIRMED 与 CANCELLED 冻结（后续操作抛 INVALID_STATE）
 - [x] API：GET /api/actions(?status)、GET/PATCH /api/actions/:id、POST /api/actions/:id/confirm、POST /api/actions/:id/cancel
 - [x] Gate 10 测试：服务层 5 项 + 路由层 1 项（含 404 / 400 / 状态流转）
+
+## Task 11 验收状态（Gate 11）
+
+- [x] Human-in-the-loop Guard（`src/server/execution/`）：`assertActionConfirmed` 确定性检查
+- [x] 统一执行入口 `executeAction`：守卫（一切写操作之前）→ Execution(RUNNING) → 工具 → SUCCESS/FAILED
+- [x] Gate 11：DRAFT→execute 抛 UnauthorizedExecutionError，无 Execution 记录、Action 仍 DRAFT、零副作用（Unauthorized Write = 0）
+- [x] CONFIRMED→execute 成功：Execution SUCCESS、Action SUCCESS、真实副作用（联系人创建）发生
+- [x] 执行失败 → Action FAILED + Execution FAILED（不抛未捕获错误）；不存在 Action → NOT_FOUND
+- [x] 启动脚本修复：HF_HUB_DISABLE_XET=1（huggingface_hub≥1.31 默认 Xet 协议，hf-mirror 401）
