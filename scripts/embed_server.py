@@ -9,6 +9,7 @@ GET  /health                         -> {"ok": true, "model": "...", "dimensions
 """
 import json
 import os
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
@@ -25,6 +26,9 @@ def load_model():
 
 
 model, DIMS = load_model()
+# onnxruntime InferenceSession 不保证并发 run 的确定性/线程安全，
+# 用全局锁串行化推理，保证同一输入总是产出同一向量（可重复运行）。
+EMBED_LOCK = threading.Lock()
 print(f"[embed] model={MODEL} dims={DIMS} listening on 127.0.0.1:{PORT}", flush=True)
 
 
@@ -60,7 +64,8 @@ class Handler(BaseHTTPRequestHandler):
             if len(texts) > 100:
                 self._send(400, {"ok": False, "error": "单次最多 100 条"})
                 return
-            vectors = [v.tolist() for v in model.embed(texts)]
+            with EMBED_LOCK:
+                vectors = [v.tolist() for v in model.embed(texts)]
             self._send(200, {"ok": True, "vectors": vectors, "dimensions": DIMS, "model": MODEL})
         except Exception as e:  # noqa: BLE001
             self._send(500, {"ok": False, "error": str(e)})

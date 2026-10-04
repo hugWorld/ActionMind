@@ -119,3 +119,16 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] Gate 8：同一批数据（`tests/fixtures/eval-set.ts`：20 条记忆 + 13 个查询，含 3 个通道分歧查询）对比三方法：
       BM25 / Embedding / Hybrid 均 Recall@5=1.0、MRR@5=1.0；Hybrid Recall@5 ≥ 单通道最优
 - [x] 修复：并行测试竞态（embedding 计数断言限定本测试记忆集）
+
+## Task 9 验收状态（Gate 9）
+
+- [x] Agent Runtime（`src/server/agent/`）：Agent → Tool Selection → Tool Result → Agent → Next Decision
+- [x] 四把工具：memory_search（复用 Task 8 Hybrid RAG）/ contact_search（复用 Task 4 解析）/ ask_user / create_action（落库 DRAFT）
+- [x] Agent 决策结构化输出（Zod discriminatedUnion，空串归一 null，参数校验失败回喂重试），最大轮数兜底 5
+- [x] Gate 9（真实 LLM deepseek-flash，5 场景）：
+      - 生成 Action：历史引用 → memory_search → contact_search → create_action（payload 含 Meeting Room 3）
+      - 询问用户：缺时间 → ask_user 问时间
+      - 选择 Memory：历史询问 → memory_search → answer 引用记忆（含 memoryIds 依据）
+      - 选择 Contact：not_found → ask_user 澄清（不假装已解析）
+      - 无行动意图 → unknown
+- [x] 稳定性修复：embed_server 推理加锁串行化（onnxruntime 并发不保证确定性）；测试种子语料去重（agent 记忆与 eval-set 逐字不同，避免并行歧义）；embedding 断言改为 id 精确映射

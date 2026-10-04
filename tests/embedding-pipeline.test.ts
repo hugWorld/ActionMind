@@ -33,6 +33,7 @@ describe("Task 6: Embedding Pipeline（Vector Search）", () => {
   let provider: EmbeddingProvider;
   let child: ChildProcess | null = null;
   const created: string[] = [];
+  let idByContent = new Map<string, string>();
 
   beforeAll(async () => {
     if (!(await serverReady())) {
@@ -48,6 +49,18 @@ describe("Task 6: Embedding Pipeline（Vector Search）", () => {
       expect(await serverReady()).toBe(true);
     }
     provider = createEmbeddingProvider();
+    for (const content of EVAL_MEMORIES) {
+      const m = await prisma.memory.create({
+        data: {
+          type: memoryType(content),
+          content,
+          source: "model_inferred",
+          confidence: 0.3,
+        },
+      });
+      created.push(m.id);
+      idByContent.set(content, m.id);
+    }
   }, 180_000);
 
   afterAll(async () => {
@@ -59,17 +72,7 @@ describe("Task 6: Embedding Pipeline（Vector Search）", () => {
   });
 
   it("写入 20 条记忆并全部生成 embedding", async () => {
-    for (const content of EVAL_MEMORIES) {
-      const m = await prisma.memory.create({
-        data: {
-          type: memoryType(content),
-          content,
-          source: "model_inferred",
-          confidence: 0.3,
-        },
-      });
-      created.push(m.id);
-    }
+    // 记忆已在 beforeAll 创建；这里只为它们补 embedding 并做精确断言
     const n = await embedMemoriesMissing(provider);
     // 并行测试文件（hybrid-rag）也会触发全量 backfill，故只断言下限
     expect(n).toBeGreaterThanOrEqual(EVAL_MEMORIES.length);
@@ -83,16 +86,15 @@ describe("Task 6: Embedding Pipeline（Vector Search）", () => {
 
   it("10 个查询均可完成 Vector Search 且 Top-5 命中预期记忆", async () => {
     for (const { query, expectedContent } of EVAL_QUERIES) {
-      const hits = await searchMemories(provider, query, { k: 5 });
+      // contentIn 限定本数据集语料，避免并行测试文件（agent-runtime）的记忆污染检索
+      const hits = await searchMemories(provider, query, { k: 5, contentIn: EVAL_MEMORIES });
       expect(hits.length).toBeGreaterThan(0);
       expect(hits[0].similarity).toBeGreaterThan(-1);
       expect(hits[0].similarity).toBeLessThanOrEqual(1);
-      const expected = await prisma.memory.findFirst({
-        where: { content: expectedContent },
-        select: { id: true },
-      });
-      expect(expected).toBeTruthy();
-      const rank = hits.findIndex((h) => h.id === expected!.id);
+      // 用本测试创建的 id 精确定位，避免与其他测试文件同 content 记忆歧义
+      const expectedId = idByContent.get(expectedContent);
+      expect(expectedId).toBeTruthy();
+      const rank = hits.findIndex((h) => h.id === expectedId!);
       expect(rank, `查询「${query}」应命中「${expectedContent}」`).toBeGreaterThanOrEqual(0);
       expect(rank, `查询「${query}」命中排名过高`).toBeLessThan(5);
     }
