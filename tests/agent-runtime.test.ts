@@ -1,32 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { spawn, type ChildProcess } from "node:child_process";
 import { prisma } from "../src/server/db";
 import { createDeepSeekProvider } from "../src/server/llm/deepseek";
 import type { LLMProvider } from "../src/server/llm/types";
 import { createEmbeddingProvider, embedMemoriesMissing } from "../src/server/embedding";
 import type { EmbeddingProvider } from "../src/server/embedding";
+import { ensureEmbedServer } from "./helpers/ensure-embed";
 import { runAgentLoop } from "../src/server/agent";
 
 // Gate 9 — Agent Runtime：Agent Loop + memory_search / contact_search / ask_user / create_action
 // 验证：根据不同输入 → 选择 Memory / 选择 Contact / 询问用户 / 生成 Action
 
-const BASE = process.env.EMBEDDING_URL ?? "http://127.0.0.1:8765";
-const PYTHON = process.env.EMBEDDING_PYTHON ?? "/home/cjm/actionmind-embed-venv/bin/python";
-
-async function serverReady(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 describe("Task 9: Agent Runtime", () => {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   let provider: LLMProvider | null = null;
   let embedding: EmbeddingProvider;
-  let child: ChildProcess | null = null;
   const createdContacts: string[] = [];
   const createdMemories: string[] = [];
   const createdActions: string[] = [];
@@ -38,18 +25,7 @@ describe("Task 9: Agent Runtime", () => {
     if (!provider) {
       console.warn("DEEPSEEK_API_KEY 缺失，跳过真实 LLM 场景");
     }
-    if (!(await serverReady())) {
-      child = spawn(PYTHON, ["scripts/embed_server.py"], {
-        cwd: process.cwd(),
-        env: { ...process.env, HF_ENDPOINT: "https://hf-mirror.com" },
-        stdio: "ignore",
-      });
-      for (let i = 0; i < 60; i++) {
-        if (await serverReady()) break;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      expect(await serverReady()).toBe(true);
-    }
+    await ensureEmbedServer();
     embedding = createEmbeddingProvider();
 
     // 种子：联系人（张三）与记忆（Meeting Room 3 季度评审会）
@@ -87,7 +63,6 @@ describe("Task 9: Agent Runtime", () => {
     for (const id of createdMemories) await prisma.memory.delete({ where: { id } }).catch(() => {});
     for (const id of createdContacts) await prisma.contact.delete({ where: { id } }).catch(() => {});
     await prisma.$disconnect();
-    if (child) child.kill("SIGTERM");
   });
 
   it("生成 Action：选择 Memory（历史引用）+ 选择 Contact + create_action", async () => {

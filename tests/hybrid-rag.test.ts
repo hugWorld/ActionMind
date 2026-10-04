@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { spawn, type ChildProcess } from "node:child_process";
 import { prisma } from "../src/server/db";
 import { createEmbeddingProvider, embedMemoriesMissing } from "../src/server/embedding";
 import type { EmbeddingProvider } from "../src/server/embedding";
@@ -7,23 +6,12 @@ import { createHybridSearcher, detectStructuredSignal } from "../src/server/sear
 import { buildBm25Index, searchBm25 } from "../src/server/search/bm25";
 import { searchMemories } from "../src/server/embedding";
 import { evaluateRetriever } from "../src/server/eval";
+import { ensureEmbedServer } from "./helpers/ensure-embed";
 import { EVAL_MEMORIES, EVAL_QUERIES } from "./fixtures/eval-set";
 
 // Gate 8 — Hybrid RAG：同一批数据上对比 BM25 / Embedding / Hybrid，输出 Recall@5 与 MRR@5
 
-const BASE = process.env.EMBEDDING_URL ?? "http://127.0.0.1:8765";
-const PYTHON =
-  process.env.EMBEDDING_PYTHON ?? "/home/cjm/actionmind-embed-venv/bin/python";
 const K = 5;
-
-async function serverReady(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 function memoryType(content: string): string {
   if (content.includes("邮箱") || content.includes("手机号")) return "contact_update";
@@ -34,23 +22,11 @@ function memoryType(content: string): string {
 
 describe("Task 8: Hybrid RAG — BM25 vs Embedding vs Hybrid", () => {
   let provider: EmbeddingProvider;
-  let child: ChildProcess | null = null;
   const created: string[] = [];
   let idByContent = new Map<string, string>();
 
   beforeAll(async () => {
-    if (!(await serverReady())) {
-      child = spawn(PYTHON, ["scripts/embed_server.py"], {
-        cwd: process.cwd(),
-        env: { ...process.env, HF_ENDPOINT: "https://hf-mirror.com" },
-        stdio: "ignore",
-      });
-      for (let i = 0; i < 60; i++) {
-        if (await serverReady()) break;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      expect(await serverReady()).toBe(true);
-    }
+    await ensureEmbedServer();
     provider = createEmbeddingProvider();
     for (const content of EVAL_MEMORIES) {
       const m = await prisma.memory.create({
@@ -67,7 +43,6 @@ describe("Task 8: Hybrid RAG — BM25 vs Embedding vs Hybrid", () => {
       await prisma.memory.delete({ where: { id } }).catch(() => {});
     }
     await prisma.$disconnect();
-    if (child) child.kill("SIGTERM");
   });
 
   it("Gate 8：三方法在同一批数据上的 Recall@5 / MRR@5（Hybrid ≥ 单通道最优）", async () => {

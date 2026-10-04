@@ -1,26 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { spawn, type ChildProcess } from "node:child_process";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/server/db";
 import { createEmbeddingProvider, embedMemoriesMissing, searchMemories } from "../src/server/embedding";
 import type { EmbeddingProvider } from "../src/server/embedding";
+import { ensureEmbedServer } from "./helpers/ensure-embed";
 import { EVAL_MEMORIES, EVAL_QUERIES } from "./fixtures/eval-set";
 
 // Gate 6 — Embedding Pipeline（本地 CPU：fastembed + bge-small-zh-v1.5 → pgvector）
 // 至少 20 条记忆、10 个查询，能够完成 Vector Search。（数据与 Gate 8 共用同一批）
-
-const BASE = process.env.EMBEDDING_URL ?? "http://127.0.0.1:8765";
-const PYTHON =
-  process.env.EMBEDDING_PYTHON ?? "/home/cjm/actionmind-embed-venv/bin/python";
-
-async function serverReady(): Promise<boolean> {
-  try {
-    const res = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(3000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
 
 function memoryType(content: string): string {
   if (content.includes("邮箱") || content.includes("手机号")) return "contact_update";
@@ -31,23 +18,11 @@ function memoryType(content: string): string {
 
 describe("Task 6: Embedding Pipeline（Vector Search）", () => {
   let provider: EmbeddingProvider;
-  let child: ChildProcess | null = null;
   const created: string[] = [];
   let idByContent = new Map<string, string>();
 
   beforeAll(async () => {
-    if (!(await serverReady())) {
-      child = spawn(PYTHON, ["scripts/embed_server.py"], {
-        cwd: process.cwd(),
-        env: { ...process.env, HF_ENDPOINT: "https://hf-mirror.com" },
-        stdio: "ignore",
-      });
-      for (let i = 0; i < 60; i++) {
-        if (await serverReady()) break;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      expect(await serverReady()).toBe(true);
-    }
+    await ensureEmbedServer();
     provider = createEmbeddingProvider();
     for (const content of EVAL_MEMORIES) {
       const m = await prisma.memory.create({
@@ -68,7 +43,6 @@ describe("Task 6: Embedding Pipeline（Vector Search）", () => {
       await prisma.memory.delete({ where: { id } }).catch(() => {});
     }
     await prisma.$disconnect();
-    if (child) child.kill("SIGTERM");
   });
 
   it("写入 20 条记忆并全部生成 embedding", async () => {

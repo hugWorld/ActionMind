@@ -150,3 +150,9 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] CONFIRMED→execute 成功：Execution SUCCESS、Action SUCCESS、真实副作用（联系人创建）发生
 - [x] 执行失败 → Action FAILED + Execution FAILED（不抛未捕获错误）；不存在 Action → NOT_FOUND
 - [x] 启动脚本修复：HF_HUB_DISABLE_XET=1（huggingface_hub≥1.31 默认 Xet 协议，hf-mirror 401）
+
+### 运维修复（Task 11 后置）
+
+- [x] `scripts/ensure-embed.sh`：幂等拉起 embedding 服务（已健康即退出；否则拉起并等待就绪），解决 WSL 后台进程被 VM 回收导致的 ECONNREFUSED
+- [x] 测试 beforeAll 统一改走 `tests/helpers/ensure-embed.ts`（共享进程，不再各文件 spawn+kill）
+- [x] `HF_HUB_DISABLE_XET=1` 已固化进启动脚本（huggingface_hub≥1.31 默认 Xet 协议，hf-mirror 401）
