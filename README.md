@@ -182,3 +182,14 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] 输出结构 `{claim, evidenceIds[]}`；LLM 生成后经 `filterInsightsByEvidence` 严格过滤——任何证据 id 不存在/编造 → 整条剔除（不依赖 LLM 自觉）
 - [x] 无任何记忆 → 不调 LLM，直接返回「暂无可靠依据。」；全部被剔除/判定无关 → 同样返回说明
 - [x] 禁止无记忆支撑的心理/社交推断（prompt 硬约束 + 证据过滤兜底）
+
+## Task 15 — Evaluation（70-case 可重复评估）✅
+
+- 数据集 `src/server/eval/cases.ts`（PRD §53 分配）：理解 20（Intent/Entity/Time）+ 联系人解析 15（含歧义检测）+ 记忆检索 20 queries×20 记忆（独立语料）+ 工具安全 15。
+- 运行器 `src/server/eval/run70.ts` + `tests/eval-70.test.ts`；`npm run eval` 一键运行，输出指标表并落盘 `eval-report.md` / `eval-report.json`（含逐 case 明细）。
+- 评估口径：Intent/Entity/Resolution Accuracy；BM25·Embedding·Hybrid 的 Recall@5 与 MRR@5（相关命中占比口径）；Unauthorized Execution Rate（目标 0%，PRD §53.4）；Verified Memory Precision（目标 100%，PRD §54）。
+- 实测（2026-10-04 快照，可重复运行）：
+  - Intent Accuracy 0.95 / Entity 0.9677 / Time 1.0；Contact Resolution 1.0、Ambiguity Detection 1.0
+  - BM25 R@5 0.975 / MRR 0.975；Embedding 0.975 / 0.9667；Hybrid 0.975 / 0.9667（与单通道持平）
+  - Unauthorized Execution Rate 0.0（7 次未授权尝试全部拒绝）；Verified Memory Precision 1.0（成功 4 case 全部可溯源沉淀、失败 5 case 零沉淀）
+- 已知边界（逐 case 可查）：u05「新邮箱」措辞模型判 UPDATE_CONTACT（可接受分歧）；u07「我的手机号换成了 X」句式中号码偶发未入 phone 字段（真实 LLM 抽取抖动）；检索 0.975 来自 q17「周末安排」双相关只命中其一（部分召回口径）。
