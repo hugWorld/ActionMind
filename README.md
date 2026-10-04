@@ -100,3 +100,11 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] 迁移：`memories.embedding` vector(1536) → vector(512)（手写迁移——Prisma 不 diff Unsupported() 内部维度，见 `20261004180000_task6_embedding_dim`）
 - [x] `embedMemory` / `embedMemoriesMissing`（只补缺失向量）/ `searchMemories`（pgvector 余弦距离 Top-K + similarity）
 - [x] Gate 6：20 条记忆全部生成 embedding；10 个查询全部完成 Vector Search，Top-5 命中预期记忆
+
+## Task 7 验收状态（Gate 7）
+
+- [x] BM25 关键词索引（`src/server/search/bm25.ts`，纯 TS 无依赖）
+- [x] 分词：中文单字 + bigram（无词典基线），拉丁/数字连续串（电话/邮箱可精确命中）
+- [x] `buildBm25Index` / `searchBm25` / `keywordSearchMemories`，输出 Top-K / Score / Memory ID
+- [x] 打分 BM25(k1=1.5, b=0.75)，score 降序，score=0 的无关文档不返回
+- [x] Gate 7 测试：邮箱/电话/中文关键词精确命中；多文档命中排序；空索引/空查询
