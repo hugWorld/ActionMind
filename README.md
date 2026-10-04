@@ -175,3 +175,10 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - [x] 失败路径零沉淀：工具失败不生成任何 Verified Memory
 - [x] 不变式保持：Model Inference ≠ Verified Memory（候选仍须经用户确认才能升级；Verified 唯一来源为工具成功）
 - [x] 健壮性修复：`embedMemoriesMissing` 回填容忍记忆被并行删除（findUnique 而非 findUniqueOrThrow）
+
+## Task 14 验收状态（Gate 14）
+
+- [x] Evidence-grounded Insight（`src/server/insights/`）：基于检索到的真实记忆生成事实性洞察
+- [x] 输出结构 `{claim, evidenceIds[]}`；LLM 生成后经 `filterInsightsByEvidence` 严格过滤——任何证据 id 不存在/编造 → 整条剔除（不依赖 LLM 自觉）
+- [x] 无任何记忆 → 不调 LLM，直接返回「暂无可靠依据。」；全部被剔除/判定无关 → 同样返回说明
+- [x] 禁止无记忆支撑的心理/社交推断（prompt 硬约束 + 证据过滤兜底）

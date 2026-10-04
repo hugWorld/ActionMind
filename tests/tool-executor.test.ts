@@ -64,13 +64,15 @@ describe("Task 12: Tool Executor", () => {
 
   it("Gate 12 完整链路（真实 LLM）：Agent → Action → Confirm → Executor → Tool → Result", async () => {
     if (!provider) return;
-    // 真实 LLM 非确定性：偶发 ask_user/unknown（抖动）时最多重试一次，仍失败才判错
-    let outcome = (await runAgentLoop("帮我约李雷，周五下午三点。", {
+    // 真实 LLM 非确定性：偶发 ask_user/unknown（抖动）时最多重试一次，仍失败才判错。
+    // query 提供完整信息（时间+地点+联系人），避免「缺地点→追问」的采样抖动。
+    const query = "帮我约李雷，周五下午三点，在来福士咖啡厅。";
+    let outcome = (await runAgentLoop(query, {
       provider,
       embeddingProvider: embedding,
     })).outcome;
     if (outcome.kind !== "action_card") {
-      outcome = (await runAgentLoop("帮我约李雷，周五下午三点。", {
+      outcome = (await runAgentLoop(query, {
         provider,
         embeddingProvider: embedding,
       })).outcome;
