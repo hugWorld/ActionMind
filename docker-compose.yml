@@ -1,0 +1,22 @@
+# ActionMind 本地开发数据库：PostgreSQL 16 + pgvector
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: actionmind-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: actionmind
+      POSTGRES_PASSWORD: actionmind_dev
+      POSTGRES_DB: actionmind
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U actionmind -d actionmind"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  pgdata:

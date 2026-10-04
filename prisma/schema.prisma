@@ -1,0 +1,12 @@
+// ActionMind Prisma schema — Task 0 基线
+// 说明：Task 0 仅验证 Prisma 连接与 pgvector 可用性；
+// Contact/Memory/Meeting/Action/Execution 完整模型在 Task 1 引入。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
