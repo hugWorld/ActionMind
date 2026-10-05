@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 // Task 16 / Gate 16 — UI 闭环（Playwright，真实浏览器 + 真实 LLM）：
 // 上传截图 → 理解 → 生成 Action Card → 编辑补全标题 → 确认 → 执行 → SUCCESS + Verified Memory 沉淀提示
 
-const SCREENSHOT = "tests/assets/chat-screenshot.png";
+// 微信风格截图：对方「张三」在左白色气泡，自己「李四」在右绿色气泡
+const SCREENSHOT = "tests/assets/chat-wechat.png";
 
 test("UI 闭环：截图 → 理解 → Action Card → 编辑 → 确认 → 执行 → Verified Memory", async ({ page }) => {
   await page.goto("/");
@@ -37,5 +38,7 @@ test("UI 闭环：截图 → 理解 → Action Card → 编辑 → 确认 → �
   await expect(page.getByText(/执行成功，已沉淀 Verified Memory/).first()).toBeVisible({
     timeout: 90_000,
   });
-  await expect(page.locator('[data-testid="action-status"]', { hasText: "SUCCESS" })).toBeVisible();
+  await expect(
+    page.locator('[data-testid="action-status"]', { hasText: "SUCCESS" }).first(),
+  ).toBeVisible();
 });
