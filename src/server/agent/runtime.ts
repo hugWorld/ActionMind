@@ -6,6 +6,7 @@ import { understandScreenshot } from "../llm/understand";
 import {
   applyFieldDefaults,
   requiredFieldsOf,
+  FIELD_POLICIES,
   type ActionType,
 } from "../planning/field-policy";
 import {
@@ -190,12 +191,17 @@ export async function runAgentLoop(
 
 /** Required 字段的中文名（护栏提示用） */
 const FIELD_ZH: Record<string, string> = {
-  start: "会议开始时间",
+  start: "开始时间",
   contact: "联系人",
   contactName: "联系人",
   field: "要更新的字段",
   newValue: "新值",
   name: "姓名",
+  taskId: "目标任务",
+  changes: "修改内容",
+  reason: "取消原因",
+  title: "任务标题",
+  location: "地点",
 };
 
 const zhName = (f: string): string => FIELD_ZH[f] ?? f;
@@ -228,12 +234,13 @@ async function guardAction(
   | { ok: true; action: ActionCardResult }
   | { ok: false; message: string; missing: string[] }
 > {
-  const type = decision.type as ActionType;
-  if (!["CREATE_MEETING", "CREATE_CONTACT", "UPDATE_CONTACT"].includes(type)) {
+  const type = decision.type as string;
+  if (!(type in FIELD_POLICIES)) {
     return { ok: false, message: `不支持的 Action 类型：${type}`, missing: [] };
   }
-  const payload = applyFieldDefaults(type, decision.payload ?? {});
-  const missing = requiredFieldsOf(type).filter((f) => !hasFieldValue(payload, f));
+  const actionType = type as ActionType;
+  const payload = applyFieldDefaults(actionType, decision.payload ?? {});
+  const missing = requiredFieldsOf(actionType).filter((f) => !hasFieldValue(payload, f));
   if (missing.length > 0) {
     return {
       ok: false,
@@ -316,20 +323,26 @@ ${toolsDescription(tools)}
 - Conditional：地点按任务与上下文决定——若可线上/无需地点，不要问；对普通线下会议缺地点，可问一句「需要线上进行吗？」。
 
 决策规则：
-1. 输入含历史引用（“上次”“之前”“老地方”“和以前一样”等）或询问历史安排 → 先调用 memory_search。
-2. 用户询问过去/历史信息（“在哪”“什么时候”“是谁”等）→ memory_search 后用 finalize(answer) 直接回答，不要调用 create_action。
-3. 需要联系人信息 → 先调用 contact_search；not_found/ambiguous → ask_user 澄清。
-4. 【会话状态】里已经有的信息（已提取/已解析/已检索）不要重复询问；已问过的问题不要重复问。
-5. 信息足够、可执行 → 调用 create_action（payload 完整具体；结束时间可不填，系统自动补 +30 分钟）。
-6. 纯闲聊、无行动意图且不涉及历史安排 → finalize(unknown)。
-7. 禁止编造：记忆与联系人一律以工具结果为准。
-8. 若【待确认卡片】已存在，用户的新消息是对卡片的修改意见 → 用 create_action 生成更新后的卡片（type/payload 反映修改）。
-9. 每一步只能输出一个决策：call_tool 或 finalize。
+1. 用户询问当前/未来日程（“我周五有什么安排”“我和张三下次什么时候见”“我明天下午有空吗”）→ 先调用 task_search（带 startDate/endDate/contactName 等范围），再用 finalize(answer) 直接回答；不要 create_action。
+2. 用户询问过去/历史信息（“在哪”“什么时候”“是谁”“上次…几次”等）→ 先 memory_search，再用 finalize(answer) 直接回答，不要 create_action。
+3. 输入含历史引用（“上次”“之前”“老地方”“和以前一样”等）→ 先 memory_search 补全上下文。
+4. 用户要取消任务（“取消…”“删掉…”“把…取消掉”）→ 先 task_search 定位目标任务（可带 contactName/日期/title 缩小范围）；若唯一 → 生成 CANCEL_TASK action（payload {taskId, reason?}）；若返回多条候选 → 必须 ask_user 列出全部候选让用户选择，禁止猜测。取消必须经用户确认后才可执行。
+5. 用户要修改任务（“改到…”“换成…”“推迟…”“改时间”）→ 先 task_search 定位；唯一 → UPDATE_TASK action（payload {taskId, changes:{title?/start?/end?/location?/notes?}}）；多条候选 → ask_user 消歧。禁止未经确认直接修改已存在的任务。
+6. 需要联系人信息 → 先调用 contact_search；not_found/ambiguous → ask_user 澄清。
+7. 【会话状态】里已经有的信息（已提取/已解析/已检索）不要重复询问；已问过的问题不要重复问。
+8. 信息足够、可执行 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）。
+9. 纯闲聊、无行动意图且不涉及历史/日程 → finalize(unknown)。
+10. 禁止编造：任务/记忆/联系人一律以工具结果为准；工具结果里没有的信息不得写入 payload。
+11. 若【待确认卡片】已存在，用户的新消息是对卡片的修改意见 → 用 create_action 生成更新后的卡片（type/payload 反映修改）。
+12. 每一步只能输出一个决策：call_tool 或 finalize。
 
 输出示例：
-{"step":"call_tool","tool":"memory_search","arguments":{"query":"上次开会的会议室"}}
-{"step":"finalize","outcome":"answer","action":null,"answer":"根据记忆，上次和张三在 Meeting Room 3 开项目周会。"}
-{"step":"call_tool","tool":"ask_user","arguments":{"question":"会议安排在什么时间？"}}
+{"step":"call_tool","tool":"task_search","arguments":{"startDate":"2026-10-09","endDate":"2026-10-09"}}
+{"step":"call_tool","tool":"task_search","arguments":{"contactName":"张三"}}
+{"step":"finalize","outcome":"answer","action":null,"answer":"周五你有 1 项安排：15:00 与张三的会议（三楼会议室）。"}
+{"step":"call_tool","tool":"ask_user","arguments":{"question":"我找到两项符合条件的任务：①与张三的会议 ②与张三会面（都是 2026-10-09 15:00）。你希望取消哪一个？"}}
+{"step":"finalize","outcome":"action_card","action":{"type":"CANCEL_TASK","payload":{"taskId":"<任务id>","reason":"行程冲突"}},"answer":null}
+{"step":"finalize","outcome":"action_card","action":{"type":"UPDATE_TASK","payload":{"taskId":"<任务id>","changes":{"start":"2026-10-10T15:00:00+08:00"}}},"answer":null}
 {"step":"finalize","outcome":"action_card","action":{"type":"CREATE_MEETING","payload":{"title":"和张三开会","start":"2026-10-09T15:00:00+08:00"}},"answer":null}`;
 }
 

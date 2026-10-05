@@ -5,6 +5,7 @@ import type { LLMProvider } from "../llm/types";
 import type { EmbeddingProvider } from "../embedding";
 import { resolveContact } from "../contacts/resolve";
 import { createHybridSearcher, type HybridSearcher } from "../search/hybrid";
+import { queryTasks } from "../tasks";
 import type { AgentToolName, ActionCardResult } from "./types";
 
 // Task 9 — Agent 工具：memory_search / contact_search / ask_user / create_action
@@ -58,10 +59,35 @@ export async function createAgentTools(deps: AgentToolsDeps): Promise<AgentToolM
   });
 
   const createActionSchema = z.object({
-    type: z.enum(["CREATE_MEETING", "CREATE_CONTACT", "UPDATE_CONTACT"]),
+    type: z.enum([
+      "CREATE_TASK",
+      "CREATE_MEETING", // 兼容别名
+      "UPDATE_TASK",
+      "CANCEL_TASK",
+      "CREATE_CONTACT",
+      "UPDATE_CONTACT",
+    ]),
     payload: z.record(z.string(), z.unknown()).refine((p) => Object.keys(p).length > 0, {
       message: "payload 不能为空对象",
     }),
+  });
+
+  const taskSearchSchema = z.object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    contactId: z.string().optional(),
+    contactName: z.string().optional(),
+    /** YYYY-MM-DD（Asia/Shanghai） */
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+    /** ISO 8601 时间点（>= startAt） */
+    startTime: z.string().optional(),
+    /** MEETING | TODO | REMINDER | OTHER */
+    taskType: z.string().optional(),
+    /** CONFIRMED | COMPLETED | CANCELLED */
+    status: z.string().optional(),
+    includeCancelled: z.boolean().optional(),
+    limit: z.number().int().min(1).max(100).optional(),
   });
 
   const tools: AgentToolMap = {
@@ -93,6 +119,17 @@ export async function createAgentTools(deps: AgentToolsDeps): Promise<AgentToolM
       execute: async (args) => {
         const input = contactSearchSchema.parse(args);
         return resolveContact(input);
+      },
+    },
+    task_search: {
+      name: "task_search",
+      description:
+        "查询当前日程/任务（PostgreSQL 单一数据源，与日程页共享）。参数：id / title / contactId / contactName / startDate / endDate / startTime / taskType / status / includeCancelled（默认隐藏 CANCELLED）。用于：①回答查询类问题（“我周五有什么安排”“我和张三什么时候见”）；②取消/修改任务前先定位目标任务。返回候选任务列表（含 id/title/startAt/endAt/location/statusView）。若返回多条候选，必须 ask_user 让用户选择，禁止猜测。",
+      schema: taskSearchSchema,
+      execute: async (args) => {
+        const parsed = taskSearchSchema.parse(args);
+        const tasks = await queryTasks(parsed);
+        return { count: tasks.length, tasks };
       },
     },
     ask_user: {

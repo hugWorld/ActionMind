@@ -6,7 +6,15 @@
 //   2) “是否询问用户、何时询问用户”由 Agent Runtime 根据 Agent State、任务目标和已有上下文
 //      动态决定 —— 本文件不提供任何决策函数，只提供字段分类与默认值规则（单一事实源）。
 
-export type ActionType = "CREATE_MEETING" | "CREATE_CONTACT" | "UPDATE_CONTACT";
+// Task 18：统一 Action 模型 —— CREATE / UPDATE / CANCEL × TASK / CONTACT。
+// CREATE_MEETING 保留为兼容别名（等价 CREATE_TASK + type=MEETING，字段策略共享）。
+export type ActionType =
+  | "CREATE_TASK"
+  | "CREATE_MEETING"
+  | "UPDATE_TASK"
+  | "CANCEL_TASK"
+  | "CREATE_CONTACT"
+  | "UPDATE_CONTACT";
 
 export type FieldClass = "required" | "defaultable" | "optional" | "conditional";
 
@@ -75,6 +83,50 @@ export function defaultMeetingEnd(payload: Record<string, unknown>): string | un
 
 /** 各 Action 类型的字段策略（单一事实源；后续阶段可扩展） */
 export const FIELD_POLICIES: Record<ActionType, Record<string, FieldPolicyDef>> = {
+  CREATE_TASK: {
+    type: {
+      class: "defaultable",
+      reason: "任务类型缺省为 MEETING（会议是 Task 的一种类型）；明确提到 TODO/REMINDER 等才覆盖",
+      default: { description: "MEETING", apply: () => "MEETING" },
+    },
+    title: {
+      class: "defaultable",
+      reason: "任务标题缺失时可用默认标题兜底，不应阻塞建卡",
+      default: {
+        description: "「与{联系人}的{任务}」，无联系人时「新建任务」",
+        apply: (payload) => {
+          const name = contactNameOf(payload);
+          return name ? `与${name}的${(payload.type as string) === "TODO" ? "待办" : "任务"}` : "新建任务";
+        },
+      },
+    },
+    start: {
+      class: "required",
+      reason: "没有开始时间无法创建日程项（Required）",
+    },
+    end: {
+      class: "defaultable",
+      reason: "结束时间缺失时默认开始时间 + 30 分钟；用户明确指定时长/结束时间时才覆盖",
+      default: {
+        description: "end = start + (durationMinutes ?? 30) 分钟",
+        apply: defaultMeetingEnd,
+      },
+    },
+    location: {
+      class: "conditional",
+      reason: "地点是否必需取决于任务与上下文（线上会议/待办无需地点，不应一律要求填写）",
+      conditionNote:
+        "普通会议缺地点时，可向用户询问「需要线上进行吗？」；是否询问、何时询问由 Agent 根据上下文决定",
+    },
+    contact: {
+      class: "required",
+      reason: "个人日程任务通常需要明确对象（Required）；工具层对解析失败保持宽容，但 Agent 决策层应确认联系人",
+    },
+    notes: {
+      class: "optional",
+      reason: "备注/描述可有可无，缺失不询问（Optional）",
+    },
+  },
   CREATE_MEETING: {
     title: {
       class: "defaultable",
@@ -122,6 +174,17 @@ export const FIELD_POLICIES: Record<ActionType, Record<string, FieldPolicyDef>> 
     contactName: { class: "required", reason: "必须定位要更新的联系人（Required）" },
     field: { class: "required", reason: "必须指明更新哪个字段（Required）" },
     newValue: { class: "required", reason: "必须提供新值（Required）" },
+  },
+  UPDATE_TASK: {
+    taskId: { class: "required", reason: "必须定位要修改的任务（Required；由 task_search 确认唯一）" },
+    changes: {
+      class: "required",
+      reason: "必须提供修改内容（Required；title/start/end/location/notes 中至少一项）",
+    },
+  },
+  CANCEL_TASK: {
+    taskId: { class: "required", reason: "必须定位要取消的任务（Required；由 task_search 确认唯一）" },
+    reason: { class: "optional", reason: "取消原因可选，缺失不询问（Optional）" },
   },
 };
 

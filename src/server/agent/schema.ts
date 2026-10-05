@@ -7,6 +7,7 @@ const nullableString = z.preprocess((v) => (v === "" ? null : v), z.string().nul
 export const AgentToolEnum = z.enum([
   "memory_search",
   "contact_search",
+  "task_search",
   "ask_user",
   "create_action",
 ]);
@@ -17,8 +18,17 @@ const ToolCallSchema = z.object({
   arguments: z.record(z.string(), z.unknown()),
 });
 
+// Task 18：统一 Action 模型（CREATE / UPDATE / CANCEL × TASK / CONTACT）
+// CREATE_MEETING 保留为兼容别名（= CREATE_TASK type=MEETING）。
 const FinalizeActionSchema = z.object({
-  type: z.enum(["CREATE_MEETING", "CREATE_CONTACT", "UPDATE_CONTACT"]),
+  type: z.enum([
+    "CREATE_TASK",
+    "CREATE_MEETING", // 兼容别名
+    "UPDATE_TASK",
+    "CANCEL_TASK",
+    "CREATE_CONTACT",
+    "UPDATE_CONTACT",
+  ]),
   payload: z.record(z.string(), z.unknown()),
 });
 
