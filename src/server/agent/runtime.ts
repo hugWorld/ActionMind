@@ -227,6 +227,56 @@ function hasFieldValue(payload: Record<string, unknown>, field: string): boolean
  *   1) 对 Defaultable 字段应用默认值（applyFieldDefaults）；
  *   2) 校验 Required 字段，缺失 → 返回需要询问的缺口（由 Runtime 决定转 ask_user）。
  */
+/** 用户明确放行冲突的词（选择「仍然创建」等） */
+const CONFLICT_OVERRIDE_RE = /(仍然创建|照旧|不管冲突|继续创建|直接创建|就这样|没关系|可以创建|创建吧)/;
+
+/** 时间显示：ISO → 「10月9日 15:00」（UTC+8 展示） */
+function formatConflictRange(startAt?: string | null, endAt?: string | null): string {
+  const fmt = (iso?: string | null): string => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const bj = new Date(d.getTime() + 8 * 3600_000);
+    return `${bj.getUTCMonth() + 1}月${bj.getUTCDate()}日 ${String(bj.getUTCHours()).padStart(2, "0")}:${String(bj.getUTCMinutes()).padStart(2, "0")}`;
+  };
+  const s = fmt(startAt);
+  if (!s) return "";
+  const e = fmt(endAt);
+  const tail = e ? e.split(" ")[1] : "";
+  return tail ? `${s}-${tail}` : s;
+}
+
+/**
+ * 确定性冲突护栏（兜底）：即使 LLM 忘记调用 check_task_conflict，
+ * 生成「创建任务」卡片前也强制检查时间重叠；有冲突且用户未明确放行时阻断卡片、返回询问。
+ * 放行条件：会话中最近一条用户消息包含「仍然创建/照旧/不管冲突」等明确选择。
+ */
+export async function conflictGuard(
+  action: { type: string; payload: Record<string, unknown> },
+  tools: AgentToolMap,
+  state: AgentSessionState,
+): Promise<{ blocked: boolean; question?: string }> {
+  if (!["CREATE_TASK", "CREATE_MEETING"].includes(action.type)) return { blocked: false };
+  const start = action.payload.start as string | undefined;
+  if (typeof start !== "string" || !start.trim()) return { blocked: false };
+  const lastUser = [...state.messages].reverse().find((m) => m.role === "user");
+  const lastText = typeof lastUser?.content === "string" ? lastUser.content : "";
+  if (CONFLICT_OVERRIDE_RE.test(lastText)) return { blocked: false };
+  const res = (await tools.check_task_conflict.execute({
+    startAt: start,
+    ...(typeof action.payload.end === "string" && action.payload.end
+      ? { endAt: action.payload.end }
+      : {}),
+  })) as { conflicted: boolean; conflicts: Array<{ title?: string; startAt?: string; endAt?: string }> };
+  if (!res.conflicted || res.conflicts.length === 0) return { blocked: false };
+  const names = res.conflicts
+    .slice(0, 3)
+    .map((c) => `「${c.title ?? "未命名任务"}」（${formatConflictRange(c.startAt, c.endAt)}）`)
+    .join("、");
+  const question = `该时段已有任务${names}，时间重叠。仍然创建、调整时间还是放弃？`;
+  return { blocked: true, question };
+}
+
 async function guardAction(
   decision: { type: string; payload: Record<string, unknown> },
   tools: AgentToolMap,
@@ -330,7 +380,7 @@ ${toolsDescription(tools)}
 5. 用户要修改任务（“改到…”“换成…”“推迟…”“改时间”）→ 先 task_search 定位；唯一 → UPDATE_TASK action（payload {taskId, changes:{title?/start?/end?/location?/notes?}}）；多条候选 → ask_user 消歧。禁止未经确认直接修改已存在的任务。
 6. 联系人非必需：创建任务时若提到人名可先 contact_search，not_found/ambiguous 不阻塞——直接在标题体现人名并 create_action；仅当用户明确要求「创建/更新联系人」时才必须解析联系人（not_found → ask_user 澄清或生成 CREATE_CONTACT）。
 7. 【会话状态】里已经有的信息（已提取/已解析/已检索）不要重复询问；已问过的问题不要重复问。
-8. 创建/修改任务前 → 先调用 check_task_conflict（参数 startAt；修改任务时传 excludeTaskId 排除自身）检查时间冲突：
+8. 创建/修改任务前 → 必须先调用 check_task_conflict（参数 startAt；修改任务时传 excludeTaskId 排除自身）检查时间冲突——无论会议、上课、待办等任何任务类型，创建前都必须检查：
    - conflicted=false（无冲突）且信息足够 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）；
    - conflicted=true（时间与已有已确认任务重叠）→ 必须 ask_user 告知冲突任务（标题+时间）并给出选项：①调整时间 ②仍然创建（用户明确说「仍然创建/照旧/不管冲突」时直接 create_action，无需再查冲突）③放弃。禁止存在冲突时静默 create_action。
 9. 纯闲聊、无行动意图且不涉及历史/日程 → finalize(unknown)。
@@ -429,6 +479,19 @@ export async function runAgentSession(
 
     if (decision.step === "finalize") {
       if (decision.outcome === "action_card" && decision.action) {
+        // 确定性冲突护栏：LLM 未调用 check_task_conflict 时兜底（创建任务前强制查重叠）
+        const conflict = await conflictGuard(decision.action, tools, state);
+        if (conflict.blocked && conflict.question) {
+          state.messages.push({ role: "assistant", content: `【冲突检测】${conflict.question}` });
+          state.phase = "gathering";
+          touchState(state);
+          setSession(state);
+          return {
+            outcome: { kind: "ask_user", question: conflict.question, toolTrace: state.trace },
+            state,
+            sessionId: state.sessionId,
+          };
+        }
         const guarded = await guardAction(decision.action, tools);
         if (!guarded.ok) {
           state.missingRequiredInfo = guarded.missing;

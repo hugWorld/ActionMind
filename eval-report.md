@@ -1,13 +1,13 @@
 # ActionMind 70-case Evaluation Report
 
-- runAt: 2026-10-05T07:06:13.137Z
+- runAt: 2026-10-05T07:20:22.792Z
 - totalCases: 70
 
 ## Understanding（20 cases，真实 LLM）
 | 指标 | 值 |
 | --- | --- |
 | Intent Accuracy | 0.9500 |
-| Entity Accuracy | 0.9677 |
+| Entity Accuracy | 1.0000 |
 | Time Accuracy | 1.0000 |
 
 ## Contact Resolution（15 cases）

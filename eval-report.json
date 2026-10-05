@@ -1,11 +1,11 @@
 {
-  "runAt": "2026-10-05T07:06:13.137Z",
+  "runAt": "2026-10-05T07:20:22.792Z",
   "totals": {
     "totalCases": 70
   },
   "understanding": {
     "intentAccuracy": 0.95,
-    "entityAccuracy": 0.9677,
+    "entityAccuracy": 1,
     "timeAccuracy": 1,
     "details": [
       {
@@ -307,7 +307,8 @@
           ],
           "meetingStart": null,
           "missing": [
-            "time"
+            "time",
+            "location"
           ]
         }
       },
@@ -331,7 +332,9 @@
             }
           ],
           "meetingStart": "2026-11-05T10:00:00+08:00",
-          "missing": []
+          "missing": [
+            "location"
+          ]
         }
       },
       {
@@ -413,7 +416,7 @@
           "got": "UPDATE_CONTACT",
           "ok": true
         },
-        "entityOk": false,
+        "entityOk": true,
         "timeOk": true,
         "got": {
           "intent": "UPDATE_CONTACT",
@@ -421,7 +424,7 @@
             {
               "name": "何静",
               "email": null,
-              "phone": null,
+              "phone": "13700007890",
               "organization": null
             }
           ],

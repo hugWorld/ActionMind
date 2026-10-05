@@ -67,6 +67,35 @@ const TYPE_ZH: Record<string, string> = {
 };
 
 /** 操作语义（需求八：Action Card 按 ActionType 显示不同内容） */
+/** 执行结果美化：JSON → 人类可读文本（不要直接给用户看 JSON） */
+function renderExecResult(raw?: string): string {
+  if (!raw) return "";
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return raw;
+  }
+  if (!obj || typeof obj !== "object") return raw;
+  const title = typeof obj.title === "string" && obj.title ? obj.title : "任务";
+  const typeZh: Record<string, string> = { MEETING: "会议", TODO: "待办", REMINDER: "提醒", OTHER: "事项" };
+  const kind = typeZh[String(obj.taskType ?? "")] ?? "任务";
+  const fmt = (iso: unknown): string => {
+    if (typeof iso !== "string") return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const bj = new Date(d.getTime() + 8 * 3600_000);
+    return `${bj.getUTCMonth() + 1}月${bj.getUTCDate()}日 ${String(bj.getUTCHours()).padStart(2, "0")}:${String(bj.getUTCMinutes()).padStart(2, "0")}`;
+  };
+  const start = fmt(obj.startAt);
+  let time = start;
+  if (start && typeof obj.endAt === "string") {
+    const end = fmt(obj.endAt);
+    if (end) time = `${start}-${end.split(" ")[1] ?? end}`;
+  }
+  return [kind, title, time ? `（${time}）` : ""].join("：").replace(/：/, " ");
+}
+
 const ACTION_VERB: Record<string, string> = {
   CREATE_TASK: "即将创建",
   CREATE_MEETING: "即将创建",
@@ -440,9 +469,9 @@ export default function Home() {
               执行成功，已沉淀 Verified Memory
             </p>
             {m.execResult && (
-              <pre className="mt-1 overflow-x-auto text-xs text-zinc-600 dark:text-zinc-400">
-                {m.execResult}
-              </pre>
+              <p className="mt-1 text-emerald-700 dark:text-emerald-300">
+                {renderExecResult(m.execResult)}
+              </p>
             )}
           </div>
         ) : (
