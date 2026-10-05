@@ -11,7 +11,8 @@
     "test:e2e": "playwright test",
     "prisma:generate": "prisma generate",
     "embed:server": "bash scripts/start-embed.sh",
-    "eval": "vitest run tests/eval-70.test.ts --reporter=verbose"
+    "eval": "vitest run tests/eval-70.test.ts --reporter=verbose",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -31,6 +32,7 @@
     "eslint-config-next": "16.3.8",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.3"
   }

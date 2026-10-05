@@ -4,6 +4,7 @@
  * scheduled/completed/cancelled）、Verified Memory 5 条并补全 pgvector embedding。
  * 运行：bash -c 'set -a; source .env; set +a; npx tsx scripts/seed-demo.ts'
  */
+import "dotenv/config";
 import { prisma } from "../src/server/db";
 import { createEmbeddingProvider, embedMemoriesMissing } from "../src/server/embedding";
 
