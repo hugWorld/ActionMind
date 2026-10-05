@@ -212,10 +212,19 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - **测试**：`tests/agent-session.test.ts`（历史问答直接回答 / 多轮 ask_user→补全→卡片 / Image-only 建卡）+ Playwright 两个对话场景；vitest 文件级串行消除共享 DB 种子污染。
 - **回归**：21 测试文件 94 用例全绿；eval 70-case 指标不变。
 
+## Task 18 — 任务与日程管理 Agent（Personal Task & Schedule Agent，11 项升级）✓
+
+把产品从「会议创建 Agent」升级为「个人任务与日程管理 Agent」：创建 / 查询 / 修改 / 取消 + 独立日程页。未推翻 ReAct / Session / Memory / RAG / Tool Calling / Action Card 架构，三阶段落地、逐阶段提交：
+
+- **Stage A — 数据与执行层**：`meetings` 表加 `task_type`（默认 MEETING，兼容层）与 `notes`；新建 `src/server/tasks/`（`queryTasks` 为 Chat `task_search` 与 `/schedule` 的**单一数据源**）；工具层新增 `cancelTask`（CANCELLED 软状态，**不物理删除**，保留 Memory / Execution / Trace）与 `updateTask`；`toolForAction` 支持 CREATE_TASK / UPDATE_TASK / CANCEL_TASK。
+- **Stage B — Agent 层**：新增 `task_search` 工具（id / title / contact / 日期范围 / 类型 / 状态过滤）；`createActionSchema` 扩展为 6 类型（CREATE / UPDATE / CANCEL × TASK / CONTACT）；field-policy 新增 CREATE_TASK（结束时间默认开始 +30 分钟，location Conditional）、UPDATE_TASK（taskId+changes）、CANCEL_TASK（taskId Required，reason Optional）；runtime 决策规则重写：日程查询 → task_search + answer 不建卡、历史 → memory_search、取消/修改 → task_search 定位 + **唯一则建卡 + 多候选强制 ask_user 消歧（禁止猜测）**。
+- **Stage C — 前端**：聊天自动滚动（底部跟随 + 上滑保护 + 「回到底部」按钮，`atBottomRef` 即时同步防状态滞后拉回）；Action Card 类型化（即将创建 / 即将修改 / 即将取消，按 ActionType 展示）；新增 `/schedule` 日程页（**月 / 周 / 日**三视图 + 上一 / 下一 / 今天导航 + 「显示已取消任务」开关，默认隐藏 CANCELLED）；`GET /api/tasks` 与 Chat 共享 `queryTasks`。
+- **测试**：`tests/task-schedule.test.ts`（7 用例：CREATE_TASK 落库、queryTasks 过滤与状态映射、CANCEL_TASK 全链路含 verified memory、UPDATE_TASK、未确认守卫）+ `tests/agent-task.test.ts`（4 用例，真实 LLM：task_search 查询、多候选消歧取消、update_task 修改）+ Playwright E2E（滚动 Gate 1 两用例 / /schedule 页 / 对话闭环）。
+- **回归**：23 测试文件 105 用例全绿；`tsc --noEmit` 通过。
 
 ---
 
-# 部署与运行教程（自行测试用）
+# 部署与运行教程（自测用）
 
 ## 0. 前置条件
 
