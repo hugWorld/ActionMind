@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ActionMind",
-  description: "Context-Aware Personal Action Agent",
+  description: "Personal Task & Schedule Agent",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -17,6 +17,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <nav className="flex gap-4 text-sm">
             <a href="/" className="text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100">
               首页
+            </a>
+            <a href="/schedule" className="text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100">
+              日程
             </a>
             <a href="/actions" className="text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-zinc-100">
               Action Cards

@@ -1,11 +1,11 @@
 {
-  "runAt": "2026-10-04T12:45:26.961Z",
+  "runAt": "2026-10-05T04:39:19.143Z",
   "totals": {
     "totalCases": 70
   },
   "understanding": {
-    "intentAccuracy": 0.9,
-    "entityAccuracy": 1,
+    "intentAccuracy": 0.95,
+    "entityAccuracy": 0.9677,
     "timeAccuracy": 1,
     "details": [
       {
@@ -90,8 +90,7 @@
           ],
           "meetingStart": null,
           "missing": [
-            "time",
-            "location"
+            "time"
           ]
         }
       },
@@ -191,13 +190,13 @@
         "id": "u08",
         "intent": {
           "expected": "UPDATE_CONTACT",
-          "got": "CREATE_CONTACT",
-          "ok": false
+          "got": "UPDATE_CONTACT",
+          "ok": true
         },
         "entityOk": true,
         "timeOk": true,
         "got": {
-          "intent": "CREATE_CONTACT",
+          "intent": "UPDATE_CONTACT",
           "contacts": [
             {
               "name": "王强",
@@ -236,7 +235,9 @@
             }
           ],
           "meetingStart": "2026-10-09T15:00:00+08:00",
-          "missing": []
+          "missing": [
+            "location"
+          ]
         }
       },
       {
@@ -317,14 +318,14 @@
           "got": "CREATE_MEETING",
           "ok": true
         },
-        "entityOk": true,
+        "entityOk": false,
         "timeOk": true,
         "got": {
           "intent": "CREATE_MEETING",
           "contacts": [
             {
               "name": "冯雪",
-              "email": "fengxue@example.com",
+              "email": null,
               "phone": null,
               "organization": null
             }

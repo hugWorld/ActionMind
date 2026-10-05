@@ -38,10 +38,11 @@ test("对话式 UI 闭环：纯文字 → Agent 询问/建卡 → 确认执行 �
     await replyAndWaitCard(page, "就按你说的安排吧，电话 13800000000，没有其他信息了");
   }
 
-  // Action Card 已生成（预览，非表单）
+  // Action Card 已生成（预览，非表单）；LLM 可能先建联系人再建会议，断言兼容两种
   const card = page.getByTestId("action-card").first();
   await expect(card).toBeVisible({ timeout: 150_000 });
-  await expect(card.getByText(/创建会议/)).toBeVisible();
+  await expect(card.getByText(/创建会议|创建联系人/)).toBeVisible();
+  await expect(card.getByText(/张三/).first()).toBeVisible();
 
   // 确认并执行 → 成功 + Verified Memory 沉淀提示
   await card.getByRole("button", { name: "确认并执行" }).click();
@@ -64,6 +65,6 @@ test("对话式 UI：上传截图（Image-only）→ Agent 理解 → Action Car
 
   const card = page.getByTestId("action-card").first();
   await expect(card).toBeVisible({ timeout: 150_000 });
-  await expect(card.getByText(/创建会议/)).toBeVisible();
+  await expect(card.getByText(/创建会议|创建联系人/)).toBeVisible();
   await expect(card.getByText(/张三/).first()).toBeVisible();
 });
