@@ -1,7 +1,8 @@
 # ActionMind
 
-Context-Aware Personal Action Agent — 从聊天截图与补充文字中理解人物、时间、联系方式与行动意图，
-生成可编辑、可逐张确认的 Action Card；用户确认后才调用设备能力（会议 / 联系人）执行，
+Context-Aware Personal Action Agent — 与 Agent 对话（纯文字 / 聊天截图 / 图文混合）安排会议、管理联系人：
+Agent 从对话中理解人物、时间、联系方式与行动意图，生成可确认的 Action Card；
+用户确认后才调用设备能力（会议 / 联系人，MVP 为 PostgreSQL mock）执行，
 并将成功结果沉淀为联系人 Memory，结合上下文与已确认记忆给出有依据的洞察与建议。
 
 - 完整产品说明见 [PRD.md](PRD.md)
@@ -197,9 +198,19 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 ## Task 16 — E2E & MVP 收尾（Action Card UI + 三完整场景）✅
 
 - **UI（Task 16）**：`src/app/actions/page.tsx` Action Card 列表页——按状态筛选、逐张卡片 View / Edit（白名单字段 + evidence 编辑留痕）/ Confirm / Cancel / Execute；执行成功展示工具结果并提示 Verified Memory 已沉淀；状态机冻结（CANCELLED/FAILED/SUCCESS 不可重跑）。新 API：`POST /api/actions`（由理解结果创建 DRAFT 卡片）、`POST /api/actions/:id/execute`（确认后执行 + 即时 embedding）。
-- **首页闭环**：上传截图 → 理解 → 「生成 Action Card →」跳转卡片页 → 编辑/确认/执行。
-- **三个完整场景（Gate 16）**：`tests/e2e-flow.test.ts`（API 级真实 LLM）——CREATE_MEETING / CREATE_CONTACT / UPDATE_CONTACT，每条链路：Understanding → Action Card → 未确认拒绝 → Confirm → Tool → Verified Memory → Future Query（Hybrid RAG + BM25）命中。`tests/e2e/action-cards.spec.ts`（Playwright UI 闭环）——上传截图 → 理解 → 生成卡片 → 编辑标题 → 确认 → 执行 → SUCCESS + Verified Memory 提示。
+- **首页闭环（Task 17 重构后为对话式）**：与 Agent 多轮对话 → Action Card 预览 → 确认执行 / 对话修改 → Verified Memory（见 Task 17 段）。
+- **三个完整场景（Gate 16）**：`tests/e2e-flow.test.ts`（API 级真实 LLM）——CREATE_MEETING / CREATE_CONTACT / UPDATE_CONTACT，每条链路：Understanding → Action Card → 未确认拒绝 → Confirm → Tool → Verified Memory → Future Query（Hybrid RAG + BM25）命中。`tests/e2e/action-cards.spec.ts`（Playwright UI 闭环，Task 17 更新）——纯文字多轮对话 → 建卡 → 确认执行 → SUCCESS + Verified Memory；Image-only 上传截图 → 理解 → 卡片预览。
 - **三个 MVP Demo 支持**：Demo1 历史引用（needsMemory → 检索记忆补全地点）；Demo2 缺信息（missing → 用户补全后确认）；Demo3 长期记忆（执行成功后 Verified Memory，未来查询 RAG 命中）。
+
+## Task 17 — 交互模型重构（对话式 Agent，Gate 17）✅
+
+用户提出 13 条重构要求（告别表单 Workflow，改为真正的对话式 ReAct Loop），分三阶段落地，未删除任何既有功能：
+
+- **Stage A — 字段策略**：`src/server/planning/field-policy.ts` 定义 Required / Defaultable / Optional / Conditional 分类与默认值规则——结束时间缺省 = 开始时间 + 30 分钟（用户明确指定时长/结束时间才覆盖）、标题缺省「与{联系人}的会议」；`create_event` 结束时间自动兜底；理解层支持 `durationMinutes`（明确提到时长才填，不猜）。
+- **Stage B — 会话化 Agent Runtime**：结构化 `AgentState`（goal / extractedInfo / resolvedContacts / retrievedMemories / missingRequiredInfo / currentAction / toolResults / askedQuestions / phase / trace / messages）持久化于内存 session store（30 分钟 TTL）；`runAgentSession` 在既有 ReAct loop 上增加持久化状态与多轮续跑——ask_user 是 Agent 合法决策，用户回答/修改作为新用户消息回喂（Human Feedback）；Required 护栏（缺失 → Runtime 决定 ask_user，动态决定、不硬编码）；新增 `POST /api/agent/chat` 对话入口，支持 Text only / Image only / Text+Image。
+- **Stage C — 前端对话式 UI**：首页重写为聊天界面（纯文字 / 可选截图 / 图文混合）；Action Card 内嵌只读预览 + 「确认并执行」+ 对话式修改（想改直接输入新要求，Agent 重新生成卡片，不退化表单）；Actions 页移除表单式编辑。
+- **测试**：`tests/agent-session.test.ts`（历史问答直接回答 / 多轮 ask_user→补全→卡片 / Image-only 建卡）+ Playwright 两个对话场景；vitest 文件级串行消除共享 DB 种子污染。
+- **回归**：21 测试文件 94 用例全绿；eval 70-case 指标不变。
 
 
 ---
@@ -235,26 +246,25 @@ npm run dev
 
 > 注意：全部命令在 WSL 里跑；浏览器测试在 Windows 侧（访问 localhost:3000 即可，无需跨网络）。
 
-## 2. 自己测试的路径（三个 Demo）
+## 2. 自己测试的路径（对话式 Demo，Task 17 起）
 
-### Demo 1：创建会议（含历史引用）
+### Demo 1：创建会议（纯文字）
 
-1. 首页上传一张聊天截图（项目内置微信风格示例 `tests/assets/chat-wechat.png`：对方「张三」消息在左白色气泡、你「李四」的消息在右绿色气泡；也可上传你自己的微信/QQ 聊天截图）。
-2. 点「上传并理解」→ 看到 Intent=CREATE_MEETING、缺失项提示。
-3. 点「生成 Action Card →」跳到卡片页。
-4. 卡片上：**编辑**（补标题/地点）→ **确认** → **执行**。
-5. 成功后卡片变 SUCCESS，显示工具结果 +「已沉淀 Verified Memory」。
-6. 再发一次类似对话，Agent 会通过 RAG 检索到上次记忆（Demo 3 效果）。
+1. 首页直接输入：`帮我约张三，周五下午三点见`（不强制截图，Text-only）。
+2. Agent 缺联系人/时间时会反过来问你（ask_user 气泡），你接着回复即可（同一会话多轮续跑）。
+3. 信息足够 → 出现 Action Card 预览：结束时间自动 = 开始 + 30 分钟（默认，不用填）。
+4. 点「确认并执行」→ 成功并沉淀 Verified Memory。
 
-### Demo 2：缺信息 → Ask User 补全
+### Demo 2：上传聊天截图（Image-only / Text+Image）
 
-1. 上传只说了"帮我约张三"的截图/文字 → 理解结果 missing 含 time/location。
-2. 生成卡片后手动编辑补全时间地点，再确认执行（MVP 以卡片编辑作为补全通道）。
+1. 点「截图」选图（内置微信风格示例 `tests/assets/chat-wechat.png` / `chat-wechat-simple.png`，对方在左白气泡、你在右绿气泡；也可传自己的微信/QQ 截图）。
+2. 只传图直接「发送」，或图文一起发（图 + 补充文字）→ Agent 从截图理解意图并建卡。
+3. 想改卡片？不要填表——直接在输入框说 `时间改到周五上午十点`，Agent 会更新状态重新生成卡片。
 
-### Demo 3：长期记忆
+### Demo 3：历史问答 + 长期记忆
 
-1. 任何一次「确认 + 执行成功」都会写入 Verified Memory（source=tool_verified, confidence=1.0）。
-2. 之后提问（Agent 的 memory_search 或未来查询），Hybrid RAG（BM25+Embedding+结构化信号）会命中这些记忆。
+1. 先完成一次会议执行（Demo 1/2），Verified Memory 已沉淀。
+2. 新会话直接问：`我和张三上次是什么时候开的会？` → Agent 通过 Contact Search + Memory Retrieval 直接回答，无需截图。
 
 ## 3. 测试与评估命令
 
