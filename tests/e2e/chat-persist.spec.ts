@@ -1,8 +1,16 @@
 import { expect, test } from "@playwright/test";
+import { prisma } from "../../src/server/db";
 
 // Task 19 —— 问题③：进入日程页后返回首页，聊天记录必须保留。
 // 根因：Home 组件的 messages/sessionId 是组件内 useState，路由切换即卸载销毁。
 // 修复：sessionStorage 持久化（挂载恢复 + 变化写回）。本测试验证往返后消息仍在。
+
+test.beforeEach(async () => {
+  // 用例间共享同一数据库：清库隔离
+  await prisma.$executeRawUnsafe(
+    "TRUNCATE TABLE meetings, actions, memories, contacts, contact_phones, contact_emails RESTART IDENTITY CASCADE",
+  );
+});
 
 test("进入日程页再返回首页，聊天记录保留", async ({ page }) => {
   await page.goto("/");

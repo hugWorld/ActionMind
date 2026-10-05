@@ -1,11 +1,11 @@
 {
-  "runAt": "2026-10-05T07:20:22.792Z",
+  "runAt": "2026-10-05T07:37:23.074Z",
   "totals": {
     "totalCases": 70
   },
   "understanding": {
-    "intentAccuracy": 0.95,
-    "entityAccuracy": 1,
+    "intentAccuracy": 0.9,
+    "entityAccuracy": 0.9677,
     "timeAccuracy": 1,
     "details": [
       {
@@ -58,8 +58,7 @@
           ],
           "meetingStart": null,
           "missing": [
-            "time",
-            "location"
+            "time"
           ]
         }
       },
@@ -90,8 +89,7 @@
           ],
           "meetingStart": null,
           "missing": [
-            "time",
-            "location"
+            "time"
           ]
         }
       },
@@ -171,7 +169,7 @@
           "got": "UPDATE_CONTACT",
           "ok": true
         },
-        "entityOk": true,
+        "entityOk": false,
         "timeOk": true,
         "got": {
           "intent": "UPDATE_CONTACT",
@@ -179,7 +177,7 @@
             {
               "name": "李娜",
               "email": null,
-              "phone": "13900005678",
+              "phone": null,
               "organization": null
             }
           ],
@@ -191,13 +189,13 @@
         "id": "u08",
         "intent": {
           "expected": "UPDATE_CONTACT",
-          "got": "UPDATE_CONTACT",
-          "ok": true
+          "got": "CREATE_CONTACT",
+          "ok": false
         },
         "entityOk": true,
         "timeOk": true,
         "got": {
-          "intent": "UPDATE_CONTACT",
+          "intent": "CREATE_CONTACT",
           "contacts": [
             {
               "name": "王强",
@@ -332,9 +330,7 @@
             }
           ],
           "meetingStart": "2026-11-05T10:00:00+08:00",
-          "missing": [
-            "location"
-          ]
+          "missing": []
         }
       },
       {

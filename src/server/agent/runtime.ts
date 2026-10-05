@@ -381,7 +381,7 @@ ${toolsDescription(tools)}
 6. 联系人非必需：创建任务时若提到人名可先 contact_search，not_found/ambiguous 不阻塞——直接在标题体现人名并 create_action；仅当用户明确要求「创建/更新联系人」时才必须解析联系人（not_found → ask_user 澄清或生成 CREATE_CONTACT）。
 7. 【会话状态】里已经有的信息（已提取/已解析/已检索）不要重复询问；已问过的问题不要重复问。
 8. 创建/修改任务前 → 必须先调用 check_task_conflict（参数 startAt；修改任务时传 excludeTaskId 排除自身）检查时间冲突——无论会议、上课、待办等任何任务类型，创建前都必须检查：
-   - conflicted=false（无冲突）且信息足够 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）；
+   - conflicted=false（无冲突）且信息足够 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）；判定是否冲突一律以 check_task_conflict 工具返回为准：工具返回 conflicted=false 时绝不 ask_user 问冲突，直接继续创建；禁止未调用工具就凭空假设存在冲突，也禁止无视工具结果把无冲突说成有冲突。；
    - conflicted=true（时间与已有已确认任务重叠）→ 必须 ask_user 告知冲突任务（标题+时间）并给出选项：①调整时间 ②仍然创建（用户明确说「仍然创建/照旧/不管冲突」时直接 create_action，无需再查冲突）③放弃。禁止存在冲突时静默 create_action。
 9. 纯闲聊、无行动意图且不涉及历史/日程 → finalize(unknown)。
 10. 禁止编造：任务/记忆/联系人一律以工具结果为准；工具结果里没有的信息不得写入 payload。

@@ -35,7 +35,7 @@ test("对话式 UI 闭环：纯文字 → Agent 询问/建卡 → 确认执行 �
   const askVisible = await page.getByTestId("ask-question").first().isVisible().catch(() => false);
   if (askVisible) {
     // 用户回复补齐信息（多轮 ReAct 续跑）
-    await replyAndWaitCard(page, "就按你说的安排吧，电话 13800000000，没有其他信息了");
+    await replyAndWaitCard(page, "就按你说的安排吧，仍然创建，电话 13800000000，没有其他信息了");
   }
 
   // Action Card 已生成（预览，非表单）；LLM 可能先建联系人再建会议，断言兼容两种
@@ -60,7 +60,7 @@ test("对话式 UI：上传截图（Image-only）→ Agent 理解 → Action Car
   await waitAskOrCard(page);
   const askVisible = await page.getByTestId("ask-question").first().isVisible().catch(() => false);
   if (askVisible) {
-    await replyAndWaitCard(page, "按截图安排，电话 13800000000");
+    await replyAndWaitCard(page, "按截图安排，仍然创建，电话 13800000000");
   }
 
   const card = page.getByTestId("action-card").first();
