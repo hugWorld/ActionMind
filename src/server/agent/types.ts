@@ -4,6 +4,7 @@ export type AgentToolName =
   | "memory_search"
   | "contact_search"
   | "task_search"
+  | "check_task_conflict"
   | "ask_user"
   | "create_action";
 

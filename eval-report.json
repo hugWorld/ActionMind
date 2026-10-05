@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-05T04:39:19.143Z",
+  "runAt": "2026-10-05T05:29:03.224Z",
   "totals": {
     "totalCases": 70
   },
@@ -235,9 +235,7 @@
             }
           ],
           "meetingStart": "2026-10-09T15:00:00+08:00",
-          "missing": [
-            "location"
-          ]
+          "missing": []
         }
       },
       {
@@ -318,14 +316,14 @@
           "got": "CREATE_MEETING",
           "ok": true
         },
-        "entityOk": false,
+        "entityOk": true,
         "timeOk": true,
         "got": {
           "intent": "CREATE_MEETING",
           "contacts": [
             {
               "name": "冯雪",
-              "email": null,
+              "email": "fengxue@example.com",
               "phone": null,
               "organization": null
             }
@@ -403,7 +401,9 @@
             }
           ],
           "meetingStart": "2026-10-09T15:00:00+08:00",
-          "missing": []
+          "missing": [
+            "location"
+          ]
         }
       },
       {
@@ -413,7 +413,7 @@
           "got": "UPDATE_CONTACT",
           "ok": true
         },
-        "entityOk": true,
+        "entityOk": false,
         "timeOk": true,
         "got": {
           "intent": "UPDATE_CONTACT",
@@ -421,7 +421,7 @@
             {
               "name": "何静",
               "email": null,
-              "phone": "13700007890",
+              "phone": null,
               "organization": null
             }
           ],
@@ -611,7 +611,7 @@
     "hybrid": {
       "name": "Hybrid",
       "recallAtK": 0.975,
-      "mrrAtK": 0.9667
+      "mrrAtK": 0.975
     },
     "missQueries": []
   },

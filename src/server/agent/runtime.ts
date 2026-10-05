@@ -330,7 +330,9 @@ ${toolsDescription(tools)}
 5. 用户要修改任务（“改到…”“换成…”“推迟…”“改时间”）→ 先 task_search 定位；唯一 → UPDATE_TASK action（payload {taskId, changes:{title?/start?/end?/location?/notes?}}）；多条候选 → ask_user 消歧。禁止未经确认直接修改已存在的任务。
 6. 需要联系人信息 → 先调用 contact_search；not_found/ambiguous → ask_user 澄清。
 7. 【会话状态】里已经有的信息（已提取/已解析/已检索）不要重复询问；已问过的问题不要重复问。
-8. 信息足够、可执行 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）。
+8. 创建/修改任务前 → 先调用 check_task_conflict（参数 startAt；修改任务时传 excludeTaskId 排除自身）检查时间冲突：
+   - conflicted=false（无冲突）且信息足够 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）；
+   - conflicted=true（时间与已有已确认任务重叠）→ 必须 ask_user 告知冲突任务（标题+时间）并给出选项：①调整时间 ②仍然创建（用户明确说「仍然创建/照旧/不管冲突」时直接 create_action，无需再查冲突）③放弃。禁止存在冲突时静默 create_action。
 9. 纯闲聊、无行动意图且不涉及历史/日程 → finalize(unknown)。
 10. 禁止编造：任务/记忆/联系人一律以工具结果为准；工具结果里没有的信息不得写入 payload。
 11. 若【待确认卡片】已存在，用户的新消息是对卡片的修改意见 → 用 create_action 生成更新后的卡片（type/payload 反映修改）。
@@ -339,6 +341,8 @@ ${toolsDescription(tools)}
 输出示例：
 {"step":"call_tool","tool":"task_search","arguments":{"startDate":"2026-10-09","endDate":"2026-10-09"}}
 {"step":"call_tool","tool":"task_search","arguments":{"contactName":"张三"}}
+{"step":"call_tool","tool":"check_task_conflict","arguments":{"startAt":"2026-10-09T15:00:00+08:00"}}
+{"step":"call_tool","tool":"ask_user","arguments":{"question":"该时段已有任务「与王语嫣的方案评审会议」（2026-10-09 15:00-15:30）。仍然创建、调整时间还是放弃？"}}
 {"step":"finalize","outcome":"answer","action":null,"answer":"周五你有 1 项安排：15:00 与张三的会议（三楼会议室）。"}
 {"step":"call_tool","tool":"ask_user","arguments":{"question":"我找到两项符合条件的任务：①与张三的会议 ②与张三会面（都是 2026-10-09 15:00）。你希望取消哪一个？"}}
 {"step":"finalize","outcome":"action_card","action":{"type":"CANCEL_TASK","payload":{"taskId":"<任务id>","reason":"行程冲突"}},"answer":null}

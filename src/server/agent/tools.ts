@@ -90,6 +90,16 @@ export async function createAgentTools(deps: AgentToolsDeps): Promise<AgentToolM
     limit: z.number().int().min(1).max(100).optional(),
   });
 
+
+  const checkTaskConflictSchema = z.object({
+    /** ISO 8601 时间点（Asia/Shanghai），如 2026-10-09T15:00:00+08:00 */
+    startAt: z.string().min(1, "startAt 不能为空"),
+    /** ISO 8601 时间点；可选，默认 = startAt + 30 分钟 */
+    endAt: z.string().optional(),
+    /** 排除的任务 id（修改任务时排除自身，避免把自己当成冲突） */
+    excludeTaskId: z.string().optional(),
+  });
+
   const tools: AgentToolMap = {
     memory_search: {
       name: "memory_search",
@@ -130,6 +140,46 @@ export async function createAgentTools(deps: AgentToolsDeps): Promise<AgentToolM
         const parsed = taskSearchSchema.parse(args);
         const tasks = await queryTasks(parsed);
         return { count: tasks.length, tasks };
+      },
+    },
+    check_task_conflict: {
+      name: "check_task_conflict",
+      description:
+        "检查新任务/修改后的时间是否与已有已确认任务重叠。参数：startAt（ISO 时间点，必填）、endAt（可选，默认开始+30分钟）、excludeTaskId（修改任务时排除自身）。返回 conflicted（布尔）与冲突任务列表（id/title/startAt/endAt/location/statusView）。创建/修改任务前必须调用；有冲突时必须 ask_user 让用户选择（调整时间/仍然创建/放弃），禁止静默创建。",
+      schema: checkTaskConflictSchema,
+      execute: async (args) => {
+        const { startAt, endAt, excludeTaskId } = checkTaskConflictSchema.parse(args);
+        const ns = new Date(startAt).getTime();
+        const ne = endAt ? new Date(endAt).getTime() : ns + 30 * 60_000;
+        if (Number.isNaN(ns) || Number.isNaN(ne)) {
+          return { conflicted: false, conflicts: [], error: "时间解析失败" };
+        }
+        // 复用 queryTasks 单一数据源（默认隐藏 CANCELLED），按目标日期范围查询 + 大 limit
+        // （避免全量查询被默认 limit=50 截断导致漏判冲突）
+        const fmt = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const tasks = await queryTasks({
+          startDate: fmt(new Date(ns)),
+          endDate: fmt(new Date(ne)),
+          limit: 500,
+        });
+        const conflicts = tasks
+          .filter((t) => t.id !== excludeTaskId)
+          .filter((t) => {
+            const s = new Date(t.startAt ?? "").getTime();
+            const e = new Date(t.endAt ?? t.startAt ?? "").getTime();
+            // startAt 缺失（NaN）时不构成冲突
+            return Number.isNaN(s) ? false : ns < e && ne > s;
+          })
+          .map((t) => ({
+            id: t.id,
+            title: t.title,
+            startAt: t.startAt,
+            endAt: t.endAt,
+            location: t.location,
+            statusView: t.statusView,
+          }));
+        return { conflicted: conflicts.length > 0, conflicts };
       },
     },
     ask_user: {
