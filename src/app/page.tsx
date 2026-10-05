@@ -120,9 +120,46 @@ function displayValue(v: unknown): string {
 /** 距底部阈值（px）：低于该值视为“已在底部”，新消息自动跟随 */
 const NEAR_BOTTOM_PX = 80;
 
+// 问题③：聊天记录持久化 —— 路由切换（如进入 /schedule 再返回）或刷新后恢复。
+// 用 sessionStorage（单机自用、同标签页会话足够；后端 session store 有过期，前端恢复旧 sessionId
+// 由后端兜底：过期则自动新建并返回新 id，前端随即更新，不影响继续对话）。
+const CHAT_STORAGE_KEY = "actionmind-chat-v1";
+
+function loadChatSnapshot(): { sessionId: string | null; messages: Msg[] } {
+  if (typeof window === "undefined") return { sessionId: null, messages: [] };
+  try {
+    const raw = window.sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (!raw) return { sessionId: null, messages: [] };
+    const parsed = JSON.parse(raw) as { sessionId?: string | null; messages?: Msg[] };
+    return {
+      sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : null,
+      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
+    };
+  } catch {
+    return { sessionId: null, messages: [] };
+  }
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // 挂载后从 sessionStorage 恢复（不用惰性初始化，避免 SSR/hydration mismatch）
+  useEffect(() => {
+    const snap = loadChatSnapshot();
+    if (snap.messages.length) setMessages(snap.messages);
+    if (snap.sessionId) setSessionId(snap.sessionId);
+  }, []);
+
+  // 消息/会话变化时写回 sessionStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ sessionId, messages }));
+    } catch {
+      // 超限（图片 dataURL 过多）时静默降级：聊天仍可用，只是不再持久化
+    }
+  }, [messages, sessionId]);
   const [text, setText] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

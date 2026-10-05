@@ -10,6 +10,8 @@ export interface DeepSeekConfig {
   model?: string;
   /** 默认 120s */
   timeoutMs?: number;
+  /** 是否发送 response_format=json_object（DeepSeek 官方支持）；u2-flash 等部分 OpenAI 兼容端点不支持，需关闭，靠提示词约束 + Zod 重试兜底 */
+  jsonMode?: boolean;
 }
 
 interface ChatCompletionResponse {
@@ -22,6 +24,7 @@ export class DeepSeekProvider implements LLMProvider {
   private readonly baseUrl: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly jsonMode: boolean;
 
   constructor(config: DeepSeekConfig) {
     if (!config.apiKey) {
@@ -31,6 +34,7 @@ export class DeepSeekProvider implements LLMProvider {
     this.baseUrl = (config.baseUrl ?? "https://api.deepseek.com").replace(/\/+$/, "");
     this.model = config.model ?? "deepseek-flash";
     this.timeoutMs = config.timeoutMs ?? 120_000;
+    this.jsonMode = config.jsonMode ?? true;
   }
 
   async chat(input: ChatInput): Promise<string> {
@@ -66,7 +70,7 @@ export class DeepSeekProvider implements LLMProvider {
         model: this.model,
         messages,
         temperature: input.temperature ?? 0,
-        response_format: { type: "json_object" },
+        ...(this.jsonMode ? { response_format: { type: "json_object" } } : {}),
         stream: false,
       };
       const data = await this.post<ChatCompletionResponse>("/chat/completions", body);
@@ -139,5 +143,6 @@ export function createDeepSeekProvider(
     apiKey: env.DEEPSEEK_API_KEY ?? "",
     baseUrl: env.DEEPSEEK_BASE_URL,
     model: env.DEEPSEEK_MODEL,
+    jsonMode: env.DEEPSEEK_JSON_MODE !== "false",
   });
 }

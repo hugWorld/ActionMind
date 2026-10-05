@@ -19,7 +19,7 @@ const START = "2026-10-09T15:00:00+08:00";
 describe("field-policy：字段分类", () => {
   it("CREATE_MEETING 字段四类齐全", () => {
     expect(classifyField("CREATE_MEETING", "start")).toBe("required");
-    expect(classifyField("CREATE_MEETING", "contact")).toBe("required");
+    expect(classifyField("CREATE_MEETING", "contact")).toBe("optional");
     expect(classifyField("CREATE_MEETING", "end")).toBe("defaultable");
     expect(classifyField("CREATE_MEETING", "title")).toBe("defaultable");
     expect(classifyField("CREATE_MEETING", "notes")).toBe("optional");
@@ -42,7 +42,7 @@ describe("field-policy：字段分类", () => {
   });
 
   it("requiredFieldsOf / defaultableFieldsOf 与 policy 一致", () => {
-    expect(requiredFieldsOf("CREATE_MEETING")).toEqual(["start", "contact"]);
+    expect(requiredFieldsOf("CREATE_MEETING")).toEqual(["start"]);
     expect(defaultableFieldsOf("CREATE_MEETING")).toEqual(["title", "end"]);
   });
 });

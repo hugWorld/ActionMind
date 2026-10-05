@@ -62,7 +62,7 @@ ${toolsDescription(tools)}
 1. 输入含历史引用（“上次”“之前”“老地方”“和以前一样”等）或询问历史安排 → 先调用 memory_search。
 2. 用户询问过去/历史信息（“在哪”“什么时候”“是谁”等）时：调用 memory_search 检索记忆后，用 finalize(answer) 直接回答（answer 里引用记忆内容），不要调用 create_action。
 3. 需要联系人信息（姓名/邮箱/电话/公司）→ 先调用 contact_search；工具返回 not_found 或 ambiguous 时，调用 ask_user 向用户澄清，不要假装已解析。
-4. 关键信息缺失（时间/地点/联系人等）→ 调用 ask_user，一次只问最关键的一个问题。
+4. 仅当 Required 字段（如开始时间）缺失时才 ask_user，一次只问最关键的一个；Optional/Conditional 缺失不因此询问（地点是否问由上下文决定，如普通会议缺地点时可问「需要线上进行吗？」）。
 5. 信息齐全、可执行 → 调用 create_action 生成行动卡片（payload 必须包含完整、具体的字段，如 title/start/location/contact 等）。
 6. 纯闲聊、无任何行动意图且不涉及历史安排 → finalize(unknown)。
 7. 禁止编造：记忆与联系人一律以工具结果为准，工具结果里没有的信息不得写入 payload。
@@ -317,7 +317,7 @@ function buildSessionPrompt(now: Date, tools: AgentToolMap, state: AgentSessionS
 ${toolsDescription(tools)}
 
 字段规则（重要）：
-- Required：缺失会导致任务无法执行（如会议开始时间、联系人）。只有 Required 缺失才 ask_user，一次只问最关键的一个。
+- Required：缺失会导致任务无法执行（如任务开始时间）。只有 Required 缺失才 ask_user，一次只问最关键的一个。
 - Defaultable：结束时间缺省 = 开始时间 + 30 分钟，**不要询问结束时间**；标题缺省可由系统生成，不要因此阻塞。
 - Optional：备注、描述等可有可无，**缺失不要询问**。
 - Conditional：地点按任务与上下文决定——若可线上/无需地点，不要问；对普通线下会议缺地点，可问一句「需要线上进行吗？」。
@@ -328,7 +328,7 @@ ${toolsDescription(tools)}
 3. 输入含历史引用（“上次”“之前”“老地方”“和以前一样”等）→ 先 memory_search 补全上下文。
 4. 用户要取消任务（“取消…”“删掉…”“把…取消掉”）→ 先 task_search 定位目标任务（可带 contactName/日期/title 缩小范围）；若唯一 → 生成 CANCEL_TASK action（payload {taskId, reason?}）；若返回多条候选 → 必须 ask_user 列出全部候选让用户选择，禁止猜测。取消必须经用户确认后才可执行。
 5. 用户要修改任务（“改到…”“换成…”“推迟…”“改时间”）→ 先 task_search 定位；唯一 → UPDATE_TASK action（payload {taskId, changes:{title?/start?/end?/location?/notes?}}）；多条候选 → ask_user 消歧。禁止未经确认直接修改已存在的任务。
-6. 需要联系人信息 → 先调用 contact_search；not_found/ambiguous → ask_user 澄清。
+6. 联系人非必需：创建任务时若提到人名可先 contact_search，not_found/ambiguous 不阻塞——直接在标题体现人名并 create_action；仅当用户明确要求「创建/更新联系人」时才必须解析联系人（not_found → ask_user 澄清或生成 CREATE_CONTACT）。
 7. 【会话状态】里已经有的信息（已提取/已解析/已检索）不要重复询问；已问过的问题不要重复问。
 8. 创建/修改任务前 → 先调用 check_task_conflict（参数 startAt；修改任务时传 excludeTaskId 排除自身）检查时间冲突：
    - conflicted=false（无冲突）且信息足够 → 调用 create_action（创建任务用 CREATE_TASK，payload 完整具体；结束时间可不填，系统自动补 +30 分钟；会议也可用兼容别名 CREATE_MEETING）；

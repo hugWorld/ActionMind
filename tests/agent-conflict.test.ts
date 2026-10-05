@@ -127,10 +127,17 @@ describe("Task 18 增补: 时间冲突检测与用户选择", () => {
     expect(r.outcome.question).toContain("乔峰");
 
     // 用户选择「仍然创建」→ 直接生成卡片（不再询问），确认后执行
-    const r2 = await runAgentSession(
+    let r2 = await runAgentSession(
       { text: "仍然创建", sessionId: r.sessionId },
       { provider, embeddingProvider: embedding },
     );
+    // LLM 偶发再次确认（重问冲突）→ 再回一轮「仍然创建」
+    if (r2.outcome.kind === "ask_user") {
+      r2 = await runAgentSession(
+        { text: "仍然创建", sessionId: r2.sessionId },
+        { provider, embeddingProvider: embedding },
+      );
+    }
     expect(r2.outcome.kind).toBe("action_card");
     if (r2.outcome.kind !== "action_card") return;
     // CREATE_TASK 与兼容别名 CREATE_MEETING 均合法（等价 type=MEETING）

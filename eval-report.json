@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-05T05:29:03.224Z",
+  "runAt": "2026-10-05T07:06:13.137Z",
   "totals": {
     "totalCases": 70
   },
@@ -90,7 +90,8 @@
           ],
           "meetingStart": null,
           "missing": [
-            "time"
+            "time",
+            "location"
           ]
         }
       },
@@ -235,7 +236,9 @@
             }
           ],
           "meetingStart": "2026-10-09T15:00:00+08:00",
-          "missing": []
+          "missing": [
+            "location"
+          ]
         }
       },
       {
@@ -304,8 +307,7 @@
           ],
           "meetingStart": null,
           "missing": [
-            "time",
-            "location"
+            "time"
           ]
         }
       },
@@ -401,9 +403,7 @@
             }
           ],
           "meetingStart": "2026-10-09T15:00:00+08:00",
-          "missing": [
-            "location"
-          ]
+          "missing": []
         }
       },
       {
@@ -449,7 +449,9 @@
             }
           ],
           "meetingStart": "2026-10-09T15:00:00+08:00",
-          "missing": []
+          "missing": [
+            "location"
+          ]
         }
       },
       {
@@ -611,7 +613,7 @@
     "hybrid": {
       "name": "Hybrid",
       "recallAtK": 0.975,
-      "mrrAtK": 0.975
+      "mrrAtK": 0.9667
     },
     "missQueries": []
   },

@@ -119,8 +119,8 @@ export const FIELD_POLICIES: Record<ActionType, Record<string, FieldPolicyDef>> 
         "普通会议缺地点时，可向用户询问「需要线上进行吗？」；是否询问、何时询问由 Agent 根据上下文决定",
     },
     contact: {
-      class: "required",
-      reason: "个人日程任务通常需要明确对象（Required）；工具层对解析失败保持宽容，但 Agent 决策层应确认联系人",
+      class: "optional",
+      reason: "日程可以没有联系人（如上课、自习）；提到人名时在标题体现并尝试关联，解析失败不阻塞建卡（Optional）",
     },
     notes: {
       class: "optional",
@@ -155,8 +155,8 @@ export const FIELD_POLICIES: Record<ActionType, Record<string, FieldPolicyDef>> 
         "普通会议缺地点时，可向用户询问「需要线上进行吗？」；是否询问、何时询问由 Agent 根据上下文决定",
     },
     contact: {
-      class: "required",
-      reason: "必须明确与谁开会（Required）；工具层对解析失败保持宽容，但 Agent 决策层应确认联系人",
+      class: "optional",
+      reason: "会议可以没有联系人（如自学室、培训课）；提到人名时在标题体现并尝试关联，解析失败不阻塞建卡（Optional）",
     },
     notes: {
       class: "optional",
