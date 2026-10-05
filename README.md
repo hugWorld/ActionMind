@@ -168,6 +168,3 @@ tests/                    # Vitest 单元 / 集成 + e2e（Playwright）
 - 多用户 / 账号隔离
 - 更丰富的日程视图（甘特 / 列表导出）
 
----
-
-MIT License（可自行替换为所需许可证）。
