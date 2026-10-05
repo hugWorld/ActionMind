@@ -88,14 +88,20 @@ model Memory {
 // ---------- Meeting ----------
 
 // status: scheduled | completed | cancelled
+// Task / ScheduleItem（Task 18：会议是 Task 的一种类型，meetings 表承载全部 Task）
+//   taskType: MEETING | TODO | REMINDER | OTHER（默认 MEETING，兼容历史数据）
+//   status:   scheduled(=CONFIRMED) | completed(=COMPLETED) | cancelled(=CANCELLED)
+//   CANCELLED 不物理删除，保留 Memory / Execution / Trace
 model Meeting {
   id        String    @id @default(cuid())
   contact   Contact?  @relation(fields: [contactId], references: [id])
   contactId String?   @map("contact_id")
   title     String
+  taskType  String    @default("MEETING") @map("task_type")
   startAt   DateTime  @map("start_at")
   endAt     DateTime? @map("end_at")
   location  String?
+  notes     String?
   status    String    @default("scheduled")
   source    String?
   eventId   String?   @map("event_id")

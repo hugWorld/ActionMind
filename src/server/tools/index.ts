@@ -6,6 +6,7 @@ import { resolveContact } from "../contacts/resolve";
 import { createVerifiedMemory } from "../memory";
 import { embedOne, type EmbeddingProvider } from "../embedding";
 import { defaultMeetingEnd } from "../planning/field-policy";
+import { isTaskType } from "../tasks";
 
 // Task 12 — Tool Executor
 // PostgreSQL-backed Tools（mock 设备能力，不调用真实 Windows 日历/联系人 API）：
@@ -71,6 +72,8 @@ export async function createEvent(action: ActionLike) {
     if (dflt !== undefined) endAt = new Date(dflt);
   }
   const location = typeof p.location === "string" && p.location.trim() ? p.location.trim() : null;
+  const notes = typeof p.notes === "string" && p.notes.trim() ? p.notes.trim() : null;
+  const taskType = isTaskType(p.type) ? p.type : "MEETING";
 
   // 联系人：contactId 直接关联；否则按 name 确定性解析（ambiguous/not_found 不阻塞会议创建）
   let contactId: string | null = null;
@@ -89,9 +92,11 @@ export async function createEvent(action: ActionLike) {
   const meeting = await prisma.meeting.create({
     data: {
       title,
+      taskType,
       startAt,
       endAt,
       location,
+      notes,
       contactId,
       status: "scheduled",
       source: "tool_create_event",
@@ -100,18 +105,22 @@ export async function createEvent(action: ActionLike) {
     select: {
       id: true,
       title: true,
+      taskType: true,
       startAt: true,
       endAt: true,
       location: true,
+      notes: true,
       contactId: true,
     },
   });
   return {
     meetingId: meeting.id,
+    taskType: meeting.taskType,
     title: meeting.title,
     startAt: meeting.startAt.toISOString(),
     endAt: meeting.endAt?.toISOString() ?? null,
     location: meeting.location,
+    notes: meeting.notes,
     contactId: meeting.contactId,
   };
 }
@@ -257,6 +266,112 @@ export async function updateContact(action: ActionLike) {
   };
 }
 
+// ---------- cancel_task（Task 18：取消任务 = 状态更新为 CANCELLED，不物理删除） ----------
+
+export async function cancelTask(action: ActionLike) {
+  const p = payloadOf(action);
+  const taskId = typeof p.taskId === "string" && p.taskId.trim() ? p.taskId.trim() : null;
+  if (!taskId) throw new ToolExecutionError("取消任务缺少 taskId");
+  const reason = typeof p.reason === "string" && p.reason.trim() ? p.reason.trim() : null;
+
+  const existing = await prisma.meeting.findUnique({ where: { id: taskId } });
+  if (!existing) throw new ToolExecutionError(`任务 ${taskId} 不存在`, "TOOL_TARGET");
+  if (existing.status === "cancelled") {
+    return {
+      taskId: existing.id,
+      title: existing.title,
+      taskType: existing.taskType,
+      startAt: existing.startAt.toISOString(),
+      status: existing.status,
+      contactId: existing.contactId,
+      alreadyCancelled: true,
+    };
+  }
+
+  const updated = await prisma.meeting.update({
+    where: { id: taskId },
+    data: { status: "cancelled" },
+    select: {
+      id: true,
+      title: true,
+      taskType: true,
+      startAt: true,
+      status: true,
+      contactId: true,
+    },
+  });
+  return {
+    taskId: updated.id,
+    title: updated.title,
+    taskType: updated.taskType,
+    startAt: updated.startAt.toISOString(),
+    status: updated.status,
+    contactId: updated.contactId,
+    reason,
+    cancelled: true,
+  };
+}
+
+// ---------- update_task（Task 18：修改任务，同样 Human-in-the-loop） ----------
+
+export async function updateTask(action: ActionLike) {
+  const p = payloadOf(action);
+  const taskId = typeof p.taskId === "string" && p.taskId.trim() ? p.taskId.trim() : null;
+  if (!taskId) throw new ToolExecutionError("修改任务缺少 taskId");
+  const changes = (p.changes ?? {}) as Record<string, unknown>;
+
+  const existing = await prisma.meeting.findUnique({ where: { id: taskId } });
+  if (!existing) throw new ToolExecutionError(`任务 ${taskId} 不存在`, "TOOL_TARGET");
+  if (existing.status === "cancelled") {
+    throw new ToolExecutionError(`任务 ${taskId} 已取消（CANCELLED），不可修改`, "TOOL_TARGET");
+  }
+
+  const data: Record<string, unknown> = {};
+  if (typeof changes.title === "string" && changes.title.trim()) {
+    data.title = changes.title.trim();
+  }
+  if (typeof changes.location === "string") data.location = changes.location.trim() || null;
+  if (typeof changes.notes === "string") data.notes = changes.notes.trim() || null;
+  if (changes.start !== undefined && changes.start !== null && changes.start !== "") {
+    data.startAt = isoDate(changes.start, "任务开始时间（start）");
+  }
+  if (changes.end !== undefined && changes.end !== null && changes.end !== "") {
+    data.endAt = isoDate(changes.end, "任务结束时间（end）");
+  }
+  if (changes.taskType !== undefined && isTaskType(changes.taskType)) {
+    data.taskType = changes.taskType;
+  }
+  if (Object.keys(data).length === 0) {
+    throw new ToolExecutionError("修改任务没有可应用的变更（changes 为空）");
+  }
+
+  const updated = await prisma.meeting.update({
+    where: { id: taskId },
+    data: data as Prisma.MeetingUpdateInput,
+    select: {
+      id: true,
+      title: true,
+      taskType: true,
+      startAt: true,
+      endAt: true,
+      location: true,
+      notes: true,
+      status: true,
+    },
+  });
+  return {
+    taskId: updated.id,
+    title: updated.title,
+    taskType: updated.taskType,
+    startAt: updated.startAt.toISOString(),
+    endAt: updated.endAt?.toISOString() ?? null,
+    location: updated.location,
+    notes: updated.notes,
+    status: updated.status,
+    updatedFields: Object.keys(data),
+  };
+}
+
 // ---------- Task 13 — Tool Success → Verified Memory ----------
 
 function fmtDateTime(d: Date): string {
@@ -278,7 +393,8 @@ async function recordVerifiedMemory(
     : undefined;
 
   switch (action.type) {
-    case "CREATE_MEETING": {
+    case "CREATE_MEETING":
+    case "CREATE_TASK": {
       const r = response as {
         meetingId: string;
         title: string;
@@ -329,6 +445,52 @@ async function recordVerifiedMemory(
       );
       break;
     }
+    case "UPDATE_TASK": {
+      const r = response as {
+        taskId: string;
+        title: string;
+        taskType: string;
+        startAt: string;
+        status: string;
+        updatedFields: string[];
+      };
+      const content = `任务「${r.title}」已更新（${r.updatedFields.join("、")}）`;
+      await createVerifiedMemory(
+        {
+          type: "meeting",
+          timestamp: new Date(r.startAt),
+          content,
+          metadata: { taskId: r.taskId, taskType: r.taskType, actionId: action.id },
+        },
+        { embed },
+      );
+      break;
+    }
+    case "CANCEL_TASK": {
+      const r = response as {
+        taskId: string;
+        title: string;
+        startAt: string;
+        contactId: string | null;
+        status: string;
+        reason?: string | null;
+        cancelled?: boolean;
+      };
+      if (r.cancelled || r.status === "cancelled") {
+        const content = `已取消任务「${r.title}」${r.reason ? `（原因：${r.reason}）` : ""}`;
+        await createVerifiedMemory(
+          {
+            type: "meeting",
+            contactId: r.contactId,
+            timestamp: new Date(r.startAt),
+            content,
+            metadata: { taskId: r.taskId, actionId: action.id },
+          },
+          { embed },
+        );
+      }
+      break;
+    }
     case "UPDATE_CONTACT": {
       const r = response as {
         contactId: string;
@@ -364,11 +526,16 @@ export function toolForAction(action: ActionLike): {
 } {
   switch (action.type) {
     case "CREATE_MEETING":
+    case "CREATE_TASK": // Task 18：会议是 Task 的一种类型（兼容层，type 写入 task_type 列）
       return { toolName: "create_event", run: createEvent };
     case "CREATE_CONTACT":
       return { toolName: "create_contact", run: createContact };
     case "UPDATE_CONTACT":
       return { toolName: "update_contact", run: updateContact };
+    case "UPDATE_TASK":
+      return { toolName: "update_task", run: updateTask };
+    case "CANCEL_TASK":
+      return { toolName: "cancel_task", run: cancelTask };
     default:
       throw new ToolExecutionError(`未知 Action 类型：${action.type}`);
   }
