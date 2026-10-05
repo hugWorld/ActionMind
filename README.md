@@ -219,8 +219,9 @@ npm run test:e2e    # Playwright：首页渲染 E2E
 - **Stage A — 数据与执行层**：`meetings` 表加 `task_type`（默认 MEETING，兼容层）与 `notes`；新建 `src/server/tasks/`（`queryTasks` 为 Chat `task_search` 与 `/schedule` 的**单一数据源**）；工具层新增 `cancelTask`（CANCELLED 软状态，**不物理删除**，保留 Memory / Execution / Trace）与 `updateTask`；`toolForAction` 支持 CREATE_TASK / UPDATE_TASK / CANCEL_TASK。
 - **Stage B — Agent 层**：新增 `task_search` 工具（id / title / contact / 日期范围 / 类型 / 状态过滤）；`createActionSchema` 扩展为 6 类型（CREATE / UPDATE / CANCEL × TASK / CONTACT）；field-policy 新增 CREATE_TASK（结束时间默认开始 +30 分钟，location Conditional）、UPDATE_TASK（taskId+changes）、CANCEL_TASK（taskId Required，reason Optional）；runtime 决策规则重写：日程查询 → task_search + answer 不建卡、历史 → memory_search、取消/修改 → task_search 定位 + **唯一则建卡 + 多候选强制 ask_user 消歧（禁止猜测）**。
 - **Stage C — 前端**：聊天自动滚动（底部跟随 + 上滑保护 + 「回到底部」按钮，`atBottomRef` 即时同步防状态滞后拉回）；Action Card 类型化（即将创建 / 即将修改 / 即将取消，按 ActionType 展示）；新增 `/schedule` 日程页（**月 / 周 / 日**三视图 + 上一 / 下一 / 今天导航 + 「显示已取消任务」开关，默认隐藏 CANCELLED）；`GET /api/tasks` 与 Chat 共享 `queryTasks`。
+- **时间冲突检测（增补）**：`check_task_conflict` 工具——创建/修改任务前先查与已有已确认任务的时间重叠（复用 queryTasks 单一数据源，默认排除 CANCELLED）；有冲突时 Agent 必须 ask_user 让用户选择（①调整时间 ②仍然创建 ③放弃），禁止静默创建；修改任务时传 `excludeTaskId` 排除自身。测试：`tests/agent-conflict.test.ts`（确定性单测：重叠/排除自身/不重叠；真实 LLM：冲突→询问→「仍然创建」两任务并存、「改到下午四点」无冲突建卡）。
 - **测试**：`tests/task-schedule.test.ts`（7 用例：CREATE_TASK 落库、queryTasks 过滤与状态映射、CANCEL_TASK 全链路含 verified memory、UPDATE_TASK、未确认守卫）+ `tests/agent-task.test.ts`（4 用例，真实 LLM：task_search 查询、多候选消歧取消、update_task 修改）+ Playwright E2E（滚动 Gate 1 两用例 / /schedule 页 / 对话闭环）。
-- **回归**：23 测试文件 105 用例全绿；`tsc --noEmit` 通过。
+- **回归**：24 测试文件 108 用例全绿（含冲突检测 3 用例）；`tsc --noEmit` 通过。
 
 ---
 
