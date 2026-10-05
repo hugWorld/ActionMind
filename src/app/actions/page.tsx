@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// Task 16 — Action Card UI：View / Edit / Confirm / Cancel / Execute（逐张确认，Human-in-the-loop）
+// Task 16 — Action Card UI：View / Confirm / Cancel / Execute（逐张确认，Human-in-the-loop）
+// Task 17 (Stage C) — 移除表单式编辑：修改卡片一律回到首页对话，由 Agent 更新后重新生成（约束：不退化表单）。
 
 interface ActionItem {
   id: string;
@@ -69,22 +70,6 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
-function payloadToDraft(payload: Record<string, unknown>): Record<string, string> {
-  const draft: Record<string, string> = {};
-  const nested =
-    typeof payload.contact === "object" && payload.contact !== null
-      ? (payload.contact as Record<string, unknown>)
-      : {};
-  for (const f of EDITABLE_FIELDS) {
-    const raw = payload[f] ?? nested[f];
-    if (raw === null || raw === undefined) draft[f] = "";
-    else if (Array.isArray(raw)) draft[f] = raw.join(", ");
-    else if (typeof raw === "object") draft[f] = JSON.stringify(raw);
-    else draft[f] = String(raw);
-  }
-  return draft;
-}
-
 export default function ActionsPage() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("id");
@@ -93,8 +78,6 @@ export default function ActionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Record<string, string>>({});
   const [execResults, setExecResults] = useState<Record<string, ExecResult>>({});
 
   const load = useCallback(async (status?: string) => {
@@ -178,38 +161,6 @@ export default function ActionsPage() {
     }
   };
 
-  const startEdit = (a: ActionItem) => {
-    setEditingId(a.id);
-    setDraft(payloadToDraft(a.payload));
-  };
-
-  const onSaveEdit = async (id: string) => {
-    const patch: Record<string, unknown> = {};
-    for (const f of EDITABLE_FIELDS) {
-      if (!(f in draft)) continue;
-      const raw = draft[f];
-      if (f === "missing" || f === "email" || f === "phone") {
-        const parts = raw
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        patch[f] = parts.length ? parts : null;
-      } else {
-        patch[f] = raw.trim() === "" ? null : raw.trim();
-      }
-    }
-    setBusyId(id);
-    try {
-      await act(`/api/actions/${id}`, { method: "PATCH", body: patch });
-      setEditingId(null);
-      await load(statusFilter);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const renderPayloadRows = (a: ActionItem) => {
     const payload = a.payload ?? {};
     const nested =
@@ -272,7 +223,7 @@ export default function ActionsPage() {
           <p className="text-sm text-zinc-400">加载中…</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-zinc-400">
-            暂无 {statusFilter === "ALL" ? "" : statusFilter} 状态的卡片。请先在首页上传聊天截图生成 Action Card。
+            暂无 {statusFilter === "ALL" ? "" : statusFilter} 状态的卡片。请先在首页与 Agent 对话生成 Action Card。
           </p>
         ) : (
           <ul className="space-y-4">
@@ -306,56 +257,22 @@ export default function ActionsPage() {
                     </span>
                   </div>
 
-                  {editingId === a.id ? (
-                    <div className="space-y-2">
-                      {EDITABLE_FIELDS.map((f) => (
-                        <label key={f} className="block">
-                          <span className="mb-1 block text-xs text-zinc-400">
-                            {FIELD_LABEL[f] ?? f}
-                          </span>
-                          <input
-                            value={draft[f] ?? ""}
-                            onChange={(e) => setDraft((d) => ({ ...d, [f]: e.target.value }))}
-                            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-black outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-                          />
-                        </label>
-                      ))}
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => onSaveEdit(a.id)}
-                          disabled={busyId === a.id}
-                          className="rounded-lg bg-black px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-80 disabled:opacity-50 dark:bg-white dark:text-black"
-                        >
-                          保存
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="rounded-lg px-4 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {renderPayloadRows(a)}
-                      {Array.isArray(a.evidence?.edits) && a.evidence.edits.length > 0 && (
-                        <details className="mt-3">
-                          <summary className="cursor-pointer text-xs text-zinc-400">
-                            编辑记录（{a.evidence.edits.length}）
-                          </summary>
-                          <ul className="mt-1 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                            {a.evidence.edits.map((e, i) => (
-                              <li key={i}>
-                                {new Date(e.at).toLocaleString("zh-CN", { hour12: false })} ·{" "}
-                                {FIELD_LABEL[e.field] ?? e.field}：{displayValue(e.from)} →{" "}
-                                {displayValue(e.to)}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
-                    </>
+                  {renderPayloadRows(a)}
+                  {Array.isArray(a.evidence?.edits) && a.evidence.edits.length > 0 && (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-xs text-zinc-400">
+                        编辑记录（{a.evidence.edits.length}）
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        {a.evidence.edits.map((e, i) => (
+                          <li key={i}>
+                            {new Date(e.at).toLocaleString("zh-CN", { hour12: false })} ·{" "}
+                            {FIELD_LABEL[e.field] ?? e.field}：{displayValue(e.from)} →{" "}
+                            {displayValue(e.to)}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   )}
 
                   {exec && (
@@ -381,12 +298,6 @@ export default function ActionsPage() {
                     {a.status === "DRAFT" && (
                       <>
                         <button
-                          onClick={() => startEdit(a)}
-                          className="rounded-lg px-4 py-1.5 text-sm font-medium ring-1 ring-zinc-300 hover:bg-zinc-100 dark:ring-zinc-700 dark:hover:bg-zinc-800"
-                        >
-                          编辑
-                        </button>
-                        <button
                           onClick={() => onConfirm(a.id)}
                           disabled={busyId === a.id}
                           className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition hover:opacity-80 disabled:opacity-50"
@@ -400,6 +311,9 @@ export default function ActionsPage() {
                         >
                           取消
                         </button>
+                        <span className="self-center text-xs text-zinc-400">
+                          修改请回首页对话（Agent 会重新生成卡片）
+                        </span>
                       </>
                     )}
                     {a.status === "CONFIRMED" && (
