@@ -7,8 +7,12 @@ import {
   applyFieldDefaults,
   requiredFieldsOf,
   FIELD_POLICIES,
+  FIELD_ZH,
+  hasFieldValue,
+  zhName,
   type ActionType,
 } from "../planning/field-policy";
+import { MAX_VERIFIER_RETRIES, verifyAction, verifierFeedbackMessage, verifierTrace } from "../verifier";
 import {
   cleanupStaleSessions,
   createSessionState,
@@ -190,37 +194,6 @@ export async function runAgentLoop(
 // =====================================================================
 
 /** Required 字段的中文名（护栏提示用） */
-const FIELD_ZH: Record<string, string> = {
-  start: "开始时间",
-  contact: "联系人",
-  contactName: "联系人",
-  field: "要更新的字段",
-  newValue: "新值",
-  name: "姓名",
-  taskId: "目标任务",
-  changes: "修改内容",
-  reason: "取消原因",
-  title: "任务标题",
-  location: "地点",
-};
-
-const zhName = (f: string): string => FIELD_ZH[f] ?? f;
-
-/** 判断 payload 是否具备某字段的有效值（contact 支持嵌套/contactId 两种写法） */
-function hasFieldValue(payload: Record<string, unknown>, field: string): boolean {
-  const v = payload[field];
-  if (field === "contact") {
-    if (typeof payload.contactId === "string" && payload.contactId.trim()) return true;
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-      const c = v as Record<string, unknown>;
-      return typeof c.name === "string" && c.name.trim() !== "";
-    }
-    return false;
-  }
-  if (v == null) return false;
-  if (typeof v === "string" && v.trim() === "") return false;
-  return true;
-}
 
 /**
  * Action 卡片护栏（Runtime 动态决定；field-policy 只提供分类与默认值）：
@@ -387,6 +360,7 @@ ${toolsDescription(tools)}
 10. 禁止编造：任务/记忆/联系人一律以工具结果为准；工具结果里没有的信息不得写入 payload。
 11. 若【待确认卡片】已存在，用户的新消息是对卡片的修改意见 → 用 create_action 生成更新后的卡片（type/payload 反映修改）。
 12. 每一步只能输出一个决策：call_tool 或 finalize。
+13. 若收到【校验反馈】，说明上轮 Action Card 未通过 Verifier：必须按反馈逐条修正 payload（调整时间/补齐字段/补充依据/修正目标）后重新 finalize 生成新卡片（可先 create_action 更新），不得重复同样的错误；若反馈标注「Agent 可修正：否」，改用 ask_user 向用户说明并请求处理。
 
 输出示例：
 {"step":"call_tool","tool":"task_search","arguments":{"startDate":"2026-10-09","endDate":"2026-10-09"}}
@@ -499,6 +473,27 @@ export async function runAgentSession(
           continue; // 下一轮 LLM 应 ask_user 补齐
         }
         const action = guarded.action;
+        // Task 25 Verifier：生成卡片前独立校验；可修正问题返回 Agent 修正（有限重试，防无限循环）
+        const verify = await verifyAction(action, { stage: "card", state });
+        state.trace.push(verifierTrace(action.id, "card", verify));
+        if (!verify.passed) {
+          const fixable = verify.issues.filter((i) => i.fixableByAgent);
+          state.verifierRetries += 1;
+          if (fixable.length > 0 && state.verifierRetries <= MAX_VERIFIER_RETRIES) {
+            state.messages.push({ role: "assistant", content: verifierFeedbackMessage(verify) });
+            state.phase = "gathering";
+            touchState(state);
+            setSession(state);
+            continue; // 下一轮 LLM 按结构化反馈修正 → 重新 finalize → 再验证
+          }
+          // 超限或存在不可修正问题：放行卡片并附提示（避免死循环卡死用户；warning 不阻塞）
+          const blockers = verify.issues.filter((i) => i.severity === "error" && !i.fixableByAgent);
+          if (blockers.length > 0) {
+            state.messages.push({ role: "assistant", content: `【校验提示】存在不可自动修正的问题：${blockers.map((b) => b.message).join("；")}。已按当前内容生成卡片，请人工确认或要求修改。` });
+          } else if (state.verifierRetries > MAX_VERIFIER_RETRIES) {
+            state.messages.push({ role: "assistant", content: `【校验提示】已重试 ${state.verifierRetries} 次仍未完全通过校验，已按当前内容生成卡片；如需调整可直接告诉我。` });
+          }
+        }
         state.currentAction = {
           id: action.id,
           type: action.type,

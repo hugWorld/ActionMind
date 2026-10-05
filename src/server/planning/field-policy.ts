@@ -228,3 +228,41 @@ export function applyFieldDefaults(
   }
   return out;
 }
+
+
+// ---------- 字段展示与取值判定（Task 25 迁出自 runtime，供 Verifier / Guard 复用） ----------
+
+export const FIELD_ZH: Record<string, string> = {
+  start: "开始时间",
+  contact: "联系人",
+  contactName: "联系人",
+  field: "要更新的字段",
+  newValue: "新值",
+  name: "姓名",
+  taskId: "目标任务",
+  changes: "修改内容",
+  reason: "取消原因",
+  title: "任务标题",
+  location: "地点",
+};
+
+/** 字段中文名（缺失时原样返回） */
+export function zhName(f: string): string {
+  return FIELD_ZH[f] ?? f;
+}
+
+/** 判断 payload 是否具备某字段的有效值（contact 支持嵌套/contactId 两种写法） */
+export function hasFieldValue(payload: Record<string, unknown>, field: string): boolean {
+  const v = payload[field];
+  if (field === "contact") {
+    if (typeof payload.contactId === "string" && payload.contactId.trim()) return true;
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      const c = v as Record<string, unknown>;
+      return typeof c.name === "string" && c.name.trim() !== "";
+    }
+    return false;
+  }
+  if (v == null) return false;
+  if (typeof v === "string" && v.trim() === "") return false;
+  return true;
+}

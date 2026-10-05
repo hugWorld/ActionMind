@@ -9,7 +9,8 @@ export type AgentToolName =
   | "create_action";
 
 export interface AgentTraceItem {
-  tool: AgentToolName;
+  /** 工具名（含内部校验步骤 verifier 等，不限于 Agent 工具） */
+  tool: string;
   args: unknown;
   result: unknown;
 }

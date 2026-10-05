@@ -1,9 +1,24 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { viewAction } from "../actions";
+import { verifyAction, type VerifyResult } from "../verifier";
 
 // Task 11 — Human-in-the-loop Guard
 // 确定性安全检查：Action.status === CONFIRMED 才能执行（Gate 11：DRAFT→execute 必须失败）
+
+/** Task 25 Verifier：校验未通过时抛出（在 assertActionConfirmed 之后、执行前拦截） */
+export class VerifierRejectedError extends Error {
+  constructor(
+    message: string,
+    public readonly actionId: string,
+    public readonly verification: VerifyResult,
+  ) {
+    super(message);
+    this.name = "VerifierRejectedError";
+    this.code = "VERIFIER_REJECTED";
+  }
+  public readonly code: "VERIFIER_REJECTED";
+}
 
 export class UnauthorizedExecutionError extends Error {
   constructor(message: string, public readonly actionId: string) {
@@ -58,6 +73,9 @@ export async function executeAction(
   // 守卫在一切写操作之前
   await assertActionConfirmed(action);
 
+  // Task 25 Verifier：独立校验在 HTTP route 层（execute route）完成——确认后执行入口；
+  // executeWithTools 作为底层执行器保持可复用（Guard 仍负责 CONFIRMED 守卫），
+  // 避免测试直连路径被重复拦截。
   const execution = await prisma.execution.create({
     data: {
       actionId,

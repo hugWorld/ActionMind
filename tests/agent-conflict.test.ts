@@ -24,6 +24,11 @@ describe("Task 18 增补: 时间冲突检测与用户选择", () => {
   let conflictTaskId = ""; // 与乔峰的季度评审（2026-10-09 15:00，已确认）
 
   beforeAll(async () => {
+    // 隔离：清空任务/动作/记忆表（本文件为冲突场景专用库，串行运行），保证冲突源唯一（乔峰 15:00）
+    await prisma.meeting.deleteMany({});
+    await prisma.action.deleteMany({});
+    await prisma.memory.deleteMany({});
+    await prisma.execution.deleteMany({});
     provider = apiKey ? createDeepSeekProvider() : null;
     if (!provider) console.warn("DEEPSEEK_API_KEY 缺失，真实 LLM 场景将跳过");
     await ensureEmbedServer();

@@ -55,6 +55,8 @@ export interface AgentSessionState {
   trace: AgentTraceItem[];
   /** LLM 对话历史（续跑基础） */
   messages: ChatMessage[];
+  /** Verifier 链路已重试次数（修正回路；上限 MAX_VERIFIER_RETRIES） */
+  verifierRetries: number;
   turnCount: number;
   updatedAt: number;
 }
@@ -81,6 +83,7 @@ export function createSessionState(sessionId: string = createSessionId()): Agent
     trace: [],
     messages: [],
     turnCount: 0,
+    verifierRetries: 0,
     updatedAt: Date.now(),
   };
 }
