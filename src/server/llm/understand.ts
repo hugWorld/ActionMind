@@ -40,13 +40,14 @@ const buildSystemPrompt = (now: Date): string => {
 3. 会议时间使用 ISO 8601 且带 +08:00 偏移（例如 2026-10-09T15:00:00+08:00）。
    - 相对时间（"周五""下周三""下午三点"）基于当前时间推算；推算不出来就是 null。
    - 千万不要编造时间。
-4. 历史引用判定：当地点/安排指向历史上下文（含"上次""之前""老地方""老样子""上次那个地方""和以前一样"等词）时，needsMemory=true 且 location=null（即使原句带有地点字样也不要写入 location）。只有出现具体、明确的地点名词（如"星巴克""三楼会议室""公司楼下"）才填 location。
-5. UPDATE_CONTACT 时填充 contactUpdate（contactName、field∈{email,phone,organization,role}、newValue）；否则为 null。
-6. missing 只能取 "time" / "location" / "contact" 这三个值之一或多个，其他词一律不写；没有缺失就写空数组 []。
-7. 无法确定的字段一律输出 null（绝不能输出空字符串 ""），不要猜测。
+4. 会议时长（durationMinutes，整数分钟）：仅当聊天中明确提到时长（如"一小时""30 分钟""半天"）时填写；没提到就写 null（结束时间默认由系统按开始时间 + 30 分钟补，不用模型猜）。
+5. 历史引用判定：当地点/安排指向历史上下文（含"上次""之前""老地方""老样子""上次那个地方""和以前一样"等词）时，needsMemory=true 且 location=null（即使原句带有地点字样也不要写入 location）。只有出现具体、明确的地点名词（如"星巴克""三楼会议室""公司楼下"）才填 location。
+6. UPDATE_CONTACT 时填充 contactUpdate（contactName、field∈{email,phone,organization,role}、newValue）；否则为 null。
+7. missing 只能取 "time" / "location" / "contact" 这三个值之一或多个，其他词一律不写；没有缺失就写空数组 []。
+8. 无法确定的字段一律输出 null（绝不能输出空字符串 ""），不要猜测。
 
 输出示例（严格按此结构）：
-{"intent":"CREATE_MEETING","contacts":[{"name":"张三","email":null,"phone":null,"organization":null}],"meeting":{"title":null,"start":"2026-10-09T15:00:00+08:00","end":null,"location":null,"needsMemory":false},"contactUpdate":null,"missing":[]}`;
+{"intent":"CREATE_MEETING","contacts":[{"name":"张三","email":null,"phone":null,"organization":null}],"meeting":{"title":null,"start":"2026-10-09T15:00:00+08:00","end":null,"durationMinutes":null,"location":null,"needsMemory":false},"contactUpdate":null,"missing":[]}`;
 };
 
 const buildUserContent = (input: UnderstandInput): string => {

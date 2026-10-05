@@ -5,6 +5,7 @@ import { executeAction } from "../execution";
 import { resolveContact } from "../contacts/resolve";
 import { createVerifiedMemory } from "../memory";
 import { embedOne, type EmbeddingProvider } from "../embedding";
+import { defaultMeetingEnd } from "../planning/field-policy";
 
 // Task 12 — Tool Executor
 // PostgreSQL-backed Tools（mock 设备能力，不调用真实 Windows 日历/联系人 API）：
@@ -12,6 +13,7 @@ import { embedOne, type EmbeddingProvider } from "../embedding";
 //   create_contact → contacts + emails/phones 子表
 //   update_contact → 定位联系人后新增渠道/更新字段
 // 真实副作用全部沉淀在 PostgreSQL，为 Task 13 Verified Memory 提供 tool_verified 依据。
+// Task 17 (Stage A)：结束时间缺省 = 开始时间 + 30 分钟（field-policy 默认值规则）。
 
 export class ToolExecutionError extends Error {
   constructor(
@@ -62,7 +64,12 @@ export async function createEvent(action: ActionLike) {
     (typeof p.summary === "string" && p.summary.trim() ? p.summary.trim() : null);
   if (!title) throw new ToolExecutionError("会议缺少标题（title）");
   const startAt = isoDate(p.start, "会议开始时间（start）");
-  const endAt = p.end ? isoDate(p.end, "会议结束时间（end）") : null;
+  // Task 17 (Stage A)：结束时间缺省时默认 start + 30 分钟（用户明确指定 end 或 durationMinutes 时覆盖）
+  let endAt: Date | null = p.end ? isoDate(p.end, "会议结束时间（end）") : null;
+  if (!endAt) {
+    const dflt = defaultMeetingEnd(p);
+    if (dflt !== undefined) endAt = new Date(dflt);
+  }
   const location = typeof p.location === "string" && p.location.trim() ? p.location.trim() : null;
 
   // 联系人：contactId 直接关联；否则按 name 确定性解析（ambiguous/not_found 不阻塞会议创建）

@@ -31,6 +31,9 @@ export const MeetingPlanSchema = z.object({
   /** ISO 8601（含 +08:00 偏移），无法确定时为 null */
   start: nullableString,
   end: nullableString,
+  /** 会议时长（分钟）：仅当聊天中明确提到时长（如"一小时""30分钟"）时填写，否则为 null。
+   *  结束时间缺省规则（end = start + (durationMinutes ?? 30) 分钟）见 planning/field-policy。 */
+  durationMinutes: z.number().int().min(1).nullable().default(null),
   location: nullableString,
   /** 是否引用了历史记忆（如"上次那个地方"），需要后续 Memory 检索 */
   needsMemory: z.boolean().default(false),
