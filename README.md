@@ -75,6 +75,8 @@ npm run prisma:generate
 
 # 3.（推荐）启动本地 embedding 服务 —— 记忆检索（memory_search）依赖它
 npm run embed:server        # 首次运行会下载模型（约 100MB），之后常驻 127.0.0.1:8765
+# 注：`npm run seed:demo` 与 `npm run eval:memory` 会自动拉起该服务；
+#     若服务被系统回收（WSL 后台进程偶发），随时执行 `bash scripts/ensure-embed.sh` 重新拉起
 
 # 4. 启动开发服务器
 npm run dev
@@ -82,10 +84,10 @@ npm run dev
 
 浏览器打开 http://localhost:3000 即可开始对话。
 
-（可选）导入演示数据（3 个联系人 / 9 条任务 / 5 条记忆，覆盖三种任务类型与三种状态）：
+（可选）导入演示数据 —— **100 个联系人 / 300 条任务 / 355 条记忆**（确定性生成、幂等、可随时重跑，覆盖四种任务类型与三种状态）：
 
 ```bash
-npm run seed:demo
+npm run seed:demo        # 会自动拉起本地 embedding 服务
 ```
 
 ## 使用示例
@@ -112,8 +114,10 @@ npm run seed:demo
 ## 测试
 
 ```bash
-npm test          # Vitest：单元 + 集成（含真实 LLM 场景），26 个文件 / 112 个用例
-npm run test:e2e  # Playwright：真实浏览器 + 真实 LLM 端到端（串行执行，用例间自动清库）
+npm test            # Vitest：单元 + 集成（含真实 LLM 场景），28 个文件 / 121 个用例
+npm run test:e2e    # Playwright：真实浏览器 + 真实 LLM 端到端（串行执行，用例间自动清库）
+npm run eval:memory # 记忆检索评测：26 个标注查询（精确/语义/噪声）× Hybrid 检索，
+                    # 输出 Recall@1 / Recall@5 / MRR（需先 npm run seed:demo）
 ```
 
 注意：集成与 E2E 测试会调用 DeepSeek API 并写入本地数据库，请先完成环境配置（步骤 1–3）。
@@ -143,7 +147,8 @@ src/
     insights/             # 洞察与建议
 scripts/
   embed_server.py         # 本地 embedding 服务（fastembed）
-  seed-demo.ts            # 演示数据 seed（幂等）
+  seed-demo.ts            # 演示数据 seed（幂等：100 联系人 / 300 任务 / 355 记忆）
+  memory-eval.ts          # 记忆检索评测（Recall@1 / Recall@5 / MRR）
 prisma/schema.prisma      # 数据模型
 tests/                    # Vitest 单元 / 集成 + e2e（Playwright）
 ```
