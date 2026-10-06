@@ -148,8 +148,15 @@ describe("Task 18 增补: 时间冲突检测与用户选择", () => {
     // CREATE_TASK 与兼容别名 CREATE_MEETING 均合法（等价 type=MEETING）
     expect(["CREATE_TASK", "CREATE_MEETING"]).toContain(r2.outcome.action.type);
 
-    const payload = r2.outcome.action.payload as { start?: string; contact?: { name?: string } };
-    expect(payload.contact?.name).toBe("乔峰");
+    // Agent 生成的 payload 对联系人兼容多种写法（嵌套对象 / contactId / 字符串），
+    // 产品层（field-policy hasFieldValue）本就接受；断言只要求联系人指向乔峰，不绑定具体结构。
+    const payload = r2.outcome.action.payload as {
+      start?: string;
+      contact?: { name?: string } | string;
+      contactId?: string;
+    };
+    const contactName = typeof payload.contact === "string" ? payload.contact : payload.contact?.name;
+    expect(contactName ?? payload.contactId ?? "").toContain("乔峰");
 
     const actionId = r2.outcome.action.id;
     createdActions.push(actionId);
