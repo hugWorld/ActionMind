@@ -47,6 +47,7 @@
 - **Agent State**：不只存消息，还结构化保存 `goal / extractedInfo / resolvedContacts / retrievedMemories / missingRequiredInfo / currentAction / phase / trace`
 - **字段策略分级**：`Required`（缺失会阻塞执行，如开始时间）必须追问；`Defaultable`（如结束时间默认开始 + 30 分钟）自动补；`Optional`（备注、描述）有则用、没有不追问；`Conditional`（如地点）由 Agent 根据任务和上下文动态决定是否询问
 - **防幻觉**：Agent 判定一律以工具返回为准，禁止凭空编造任务、记忆或冲突；LLM 偶发漏查时间冲突时，由确定性护栏在生成卡片前兜底拦截
+- **滚动摘要**：长对话超过阈值时，早期轮次自动压缩为要点摘要注入上下文（失败不阻塞、分批控制成本），防止上下文无限膨胀
 - **取消即归档**：取消任务采用 `CANCELLED` 状态而非物理删除，保留完整 Memory / Execution / Trace
 
 ## 技术栈

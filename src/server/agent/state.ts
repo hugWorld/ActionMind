@@ -55,6 +55,8 @@ export interface AgentSessionState {
   trace: AgentTraceItem[];
   /** LLM 对话历史（续跑基础） */
   messages: ChatMessage[];
+  /** 滚动摘要（Task 26）：早期对话压缩后的要点，注入上下文代替原文，防止无限膨胀 */
+  summary: string | null;
   /** Verifier 链路已重试次数（修正回路；上限 MAX_VERIFIER_RETRIES） */
   verifierRetries: number;
   turnCount: number;
@@ -82,6 +84,7 @@ export function createSessionState(sessionId: string = createSessionId()): Agent
     phase: "understanding",
     trace: [],
     messages: [],
+    summary: null,
     turnCount: 0,
     verifierRetries: 0,
     updatedAt: Date.now(),

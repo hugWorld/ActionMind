@@ -44,6 +44,72 @@ export interface AgentRuntimeOptions {
   now?: Date;
 }
 
+// ---------- Task 26：滚动摘要（Rolling Summary） ----------
+// 早期对话超过阈值时，把最老的若干条压缩成要点（summary）注入上下文，
+// 其余轮次只保留最近 RECENT_KEEP 条原始消息，防止上下文无限膨胀。
+const SUMMARY_TRIGGER_MESSAGES = 10; // messages 超过该条数触发
+const SUMMARY_BATCH = 6; // 每次压缩最老 6 条（约 3 轮）
+const SUMMARY_MAX_BATCHES = 2; // 单轮最多压缩批数（控制摘要调用成本）
+const RECENT_KEEP = 8; // 上下文保留最近 8 条原始消息
+const SUMMARY_PROMPT = `你正在为一个「个人事务 Agent」对话生成滚动摘要。下面是被压缩的早期对话记录（可能是用户消息、Agent 回复、工具结果）。
+
+请用中文输出 3~6 条要点，必须保留：
+- 用户的任务目标与任务类型（创建/修改/取消/查询什么任务）
+- 已确认的关键事实（具体时间、联系人、地点、任务内容）
+- 已经生成/确认/执行的动作（如已创建卡片、已执行成功）
+- 尚未解决、仍需继续处理的问题（如缺失字段、待确认事项）
+
+不要添加原文没有的信息，不要输出 JSON 或 Markdown，直接输出要点列表。`;
+
+/** 触发滚动摘要：把最老的若干条 messages 压缩进 state.summary（失败不阻塞对话）。 */
+export async function maybeRollingSummary(
+  state: AgentSessionState,
+  provider: LLMProvider,
+): Promise<boolean> {
+  let compressed = false;
+  let batches = 0;
+  while (state.messages.length > SUMMARY_TRIGGER_MESSAGES && batches < SUMMARY_MAX_BATCHES) {
+    const batch = state.messages.slice(0, SUMMARY_BATCH);
+    if (batch.length === 0) break;
+    let sum: string;
+    try {
+      sum = (
+        await provider.chat({
+          messages: [{ role: "system", content: SUMMARY_PROMPT }, ...batch],
+          temperature: 0,
+          maxTokens: 400,
+        })
+      ).trim();
+    } catch (err) {
+      // 摘要失败不阻塞对话：保留原文，下一次触发时再试
+      console.warn(`滚动摘要生成失败（本轮不压缩，对话继续）: ${(err as Error).message}`);
+      break;
+    }
+    if (!sum) break;
+    state.summary = [state.summary, sum].filter(Boolean).join("\n");
+    state.messages.splice(0, batch.length);
+    compressed = true;
+    batches += 1;
+  }
+  return compressed;
+}
+
+/** 组装本轮 LLM 上下文：system + 滚动摘要 + 最近 RECENT_KEEP 条原始消息。 */
+export function buildContextMessages(
+  state: AgentSessionState,
+  system: string,
+): ChatMessage[] {
+  const messages: ChatMessage[] = [{ role: "system", content: system }];
+  if (state.summary) {
+    messages.push({
+      role: "system",
+      content: `【会话摘要：以下为已压缩的早期对话要点，视为既定事实，无需再向用户确认】\n${state.summary}`,
+    });
+  }
+  messages.push(...state.messages.slice(-RECENT_KEEP));
+  return messages;
+}
+
 const buildSystemPrompt = (now: Date, tools: AgentToolMap): string => {
   const iso = now.toISOString();
   const cn = new Intl.DateTimeFormat("zh-CN", {
@@ -442,8 +508,9 @@ export async function runAgentSession(
 
   // 4) ReAct 循环（护栏兜底，LLM 主导）
   for (let turn = 1; turn <= maxTurns; turn++) {
+    await maybeRollingSummary(state, provider);
     const system = buildSessionPrompt(now, tools, state);
-    const messages: ChatMessage[] = [{ role: "system", content: system }, ...state.messages];
+    const messages = buildContextMessages(state, system);
     const decision = await provider.structured({
       messages,
       schema: AgentDecisionSchema,
