@@ -12,7 +12,7 @@
     "prisma:generate": "prisma generate",
     "embed:server": "bash scripts/start-embed.sh",
     "eval": "vitest run tests/eval-70.test.ts --reporter=verbose",
-    "seed:demo": "tsx scripts/seed-demo.ts",
+    "seed:demo": "bash scripts/ensure-embed.sh && tsx scripts/seed-demo.ts",
     "eval:memory": "bash scripts/ensure-embed.sh && tsx scripts/memory-eval.ts"
   },
   "dependencies": {
